@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-geist-sans: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-geist-mono: "SFMono-Regular", Consolas, monospace;
   --ink: #17352d;
   --muted: #71807b;
   --paper: #f4f6f1;
@@ -14,7 +16,7 @@
 
 * { box-sizing: border-box; }
 html { background: var(--paper); }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-geist-sans), "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-geist-sans); }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(47,107,85,.22); outline-offset: 2px; }
@@ -38,7 +40,7 @@ nav button:hover, nav button.active { color: white; background: rgba(255,255,255
 .route-stamp { margin-top: 40px; padding: 16px 14px; border: 1px dashed rgba(215,237,137,.5); border-radius: 12px; color: #d7ed89; transform: rotate(-2deg); }
 .route-stamp > div { display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 800; letter-spacing: .08em; }
 .route-stamp svg { width: 20px; transform: rotate(25deg); }
-.route-stamp small { display: block; color: #9db0a8; font: 9px var(--font-geist-mono), monospace; letter-spacing: .13em; margin-top: 8px; }
+.route-stamp small { display: block; color: #9db0a8; font: 9px var(--font-geist-mono); letter-spacing: .13em; margin-top: 8px; }
 .travel-note { margin-top: auto; position: relative; z-index: 1; display: flex; gap: 10px; align-items: flex-start; color: #bdcbc5; }
 .travel-note svg { flex: 0 0 auto; margin-top: 3px; color: #d7ed89; }
 .travel-note p { margin: 0; font-size: 12px; line-height: 1.7; }

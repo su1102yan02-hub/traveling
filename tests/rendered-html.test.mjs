@@ -23,21 +23,24 @@ test("product metadata and main experience are configured", async () => {
   assert.doesNotMatch(page, /曼谷|宁曼|CNX/);
 });
 
-test("shared persistence routes use D1 and R2", async () => {
-  const [tripRoute, photoRoute, sharedTrip, hosting] = await Promise.all([
+test("shared persistence routes use Neon and Vercel Blob", async () => {
+  const [tripRoute, photoRoute, sharedTrip, environment] = await Promise.all([
     readFile(new URL("app/api/trip/route.ts", root), "utf8"),
     readFile(new URL("app/api/photos/route.ts", root), "utf8"),
     readFile(new URL("db/shared-trip.ts", root), "utf8"),
-    readFile(new URL(".openai/hosting.json", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
   ]);
 
-  assert.match(hosting, /"d1": "DB"/);
-  assert.match(hosting, /"r2": "PHOTOS"/);
+  assert.match(environment, /DATABASE_URL/);
+  assert.match(environment, /BLOB_READ_WRITE_TOKEN/);
   assert.match(tripRoute, /add_expense/);
   assert.match(tripRoute, /replace_all_plan/);
   assert.match(tripRoute, /archive_trip/);
-  assert.match(photoRoute, /env\.PHOTOS\.put/);
-  assert.match(photoRoute, /DELETE/);
+  assert.match(photoRoute, /@vercel\/blob/);
+  assert.match(photoRoute, /put\(/);
+  assert.match(photoRoute, /del\(/);
+  assert.match(sharedTrip, /@neondatabase\/serverless/);
   assert.match(sharedTrip, /trip_archives/);
   assert.match(sharedTrip, /day_photos/);
+  assert.doesNotMatch(`${tripRoute}${photoRoute}${sharedTrip}`, /cloudflare:workers|env\.PHOTOS|D1 database/);
 });
