@@ -235,6 +235,7 @@ export default function Home() {
   const fileInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const dayScroll = useRef<HTMLDivElement>(null);
+  const initializedDateRange = useRef("");
   const dragState = useRef({ active: false, moved: false, x: 0, scrollLeft: 0 });
   const shareCode = "TRIP-START";
 
@@ -247,6 +248,13 @@ export default function Home() {
     if (data.histories) setHistories(data.histories);
     setSyncState("synced");
   }, []);
+
+  useEffect(() => {
+    if (!activeHistory) return;
+    const refreshed = histories.find((history) => history.id === activeHistory.id);
+    if (!refreshed) setActiveHistory(null);
+    else if (refreshed !== activeHistory) setActiveHistory(refreshed);
+  }, [activeHistory, histories]);
 
   const refreshTrip = useCallback(async () => {
     try {
@@ -306,10 +314,13 @@ export default function Home() {
       setSyncState("connecting");
       const response = await fetch("/api/trip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       if (!response.ok) throw new Error("save failed");
-      applySnapshot(await response.json());
+      const data = await response.json();
+      applySnapshot(data);
+      return data;
     } catch {
       setSyncState("offline");
       flash("暂时离线，已保留在当前页面");
+      return null;
     }
   }
 
@@ -339,6 +350,18 @@ export default function Home() {
     if (selectedDay > calendarDays.length) setSelectedDay(calendarDays.length);
   }, [calendarDays.length, selectedDay]);
 
+  useEffect(() => {
+    if (!trip.startDate || !trip.endDate) return;
+    const rangeKey = `${trip.startDate}|${trip.endDate}`;
+    if (initializedDateRange.current === rangeKey) return;
+    initializedDateRange.current = rangeKey;
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const targetDay = calendarDays.find((item) => item.iso === todayIso)?.day || 1;
+    setSelectedDay(targetDay);
+    window.requestAnimationFrame(() => dayScroll.current?.querySelector<HTMLElement>(`[data-day="${targetDay}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }));
+  }, [calendarDays, trip.endDate, trip.startDate]);
+
   function flash(message: string) { setToast(message); window.setTimeout(() => setToast(""), 2200); }
 
   function startDayDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -365,14 +388,37 @@ export default function Home() {
     if (!values.startDate || !values.endDate) return flash("请先选择完整的出发和返程日期");
     if (values.endDate < values.startDate) return flash("返程日期不能早于出发日期");
     setTrip((current) => ({ ...current, ...values }));
-    setSelectedDay(1); setShowDates(false); flash("旅行日期已保存，可以左右滑动浏览");
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const targetDay = todayIso >= values.startDate && todayIso <= values.endDate ? Math.floor((new Date(`${todayIso}T12:00:00`).getTime() - new Date(`${values.startDate}T12:00:00`).getTime()) / 86400000) + 1 : 1;
+    initializedDateRange.current = `${values.startDate}|${values.endDate}`;
+    setSelectedDay(targetDay); setShowDates(false); flash(targetDay > 1 ? `旅行日期已保存，已定位到今天（第 ${targetDay} 天）` : "旅行日期已保存，可以左右滑动浏览");
+    window.requestAnimationFrame(() => dayScroll.current?.querySelector<HTMLElement>(`[data-day="${targetDay}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }));
     postTrip({ action: "update_trip", ...values });
   }
 
   function archiveTrip() {
     if (!trip.startDate || !trip.endDate) { setShowDates(true); return flash("先设置旅行日期，再保存旅程"); }
     postTrip({ action: "archive_trip" });
-    flash("已保存到过去的旅程");
+    flash("已保存一份当前旅程快照");
+  }
+
+  async function updateHistory(history: TripHistory, values: { title: string; destination: string; startDate: string; endDate: string }) {
+    const result = await postTrip({ action: "update_archive", id: history.id, ...values });
+    if (result) flash("历史旅程信息已修改");
+  }
+
+  async function refreshHistory(history: TripHistory) {
+    const result = await postTrip({ action: "refresh_archive", id: history.id });
+    if (result) flash("已把当前行程、账单和照片同步到这段旅程");
+  }
+
+  async function deleteHistory(history: TripHistory) {
+    const result = await postTrip({ action: "delete_archive", id: history.id });
+    if (result) {
+      setActiveHistory(null);
+      flash("历史旅程已删除");
+    }
   }
 
   function addExpense() {
@@ -554,7 +600,7 @@ export default function Home() {
               <div className="date-range-bar"><div><CalendarBlank /><span>{trip.startDate ? `${trip.startDate} — ${trip.endDate}` : "先选择整趟旅行的日期"}</span><small>{calendarDays.length} 天行程</small></div><button onClick={() => setShowDates(true)}>{trip.startDate ? "修改日期" : "选择日期"}</button></div>
               <div className="day-strip">
                 <div className="day-scroll" ref={dayScroll} onPointerDown={startDayDrag} onPointerMove={moveDayDrag} onPointerUp={endDayDrag} onPointerCancel={endDayDrag} onPointerLeave={endDayDrag}>
-                  {calendarDays.map((item) => <button type="button" key={`${item.day}-${item.iso}`} aria-pressed={selectedDay === item.day} className={selectedDay === item.day ? "active" : ""} onClick={() => selectCalendarDay(item.day)}><span>{item.weekday}</span><strong>{item.date}</strong><small>{item.month} {item.label}</small></button>)}
+                  {calendarDays.map((item) => <button type="button" key={`${item.day}-${item.iso}`} data-day={item.day} aria-current={item.label === "今天" ? "date" : undefined} aria-pressed={selectedDay === item.day} className={selectedDay === item.day ? "active" : ""} onClick={() => selectCalendarDay(item.day)}><span>{item.weekday}</span><strong>{item.date}</strong><small>{item.month} {item.label}</small></button>)}
                 </div>
                 <div className="day-summary"><span>第 {selectedDay} 天已记</span><strong>{expenses.filter((item) => item.day === selectedDay).length} 笔</strong><small>拖动浏览全部日期</small></div>
               </div>
@@ -568,7 +614,7 @@ export default function Home() {
 
               <div className="add-expense">
                 <div className="add-title"><span><Plus weight="bold" /></span><div><strong>随手记一笔</strong><small>先选是什么，再填金额</small></div></div>
-                <label className="expense-day-picker"><CalendarBlank /><span>记在</span><select aria-label="选择开销所属日期" value={selectedDay} onChange={(event) => setSelectedDay(Number(event.target.value))}>{calendarDays.map((item) => <option key={item.day} value={item.day}>第 {item.day} 天{item.iso ? ` · ${item.iso}` : ""}</option>)}</select></label>
+                <div className="record-day-indicator"><CalendarBlank /><span>计入第 {selectedDay} 天{calendarDays[selectedDay - 1]?.iso ? ` · ${calendarDays[selectedDay - 1].iso}` : ""}</span><small>点击上方日期卡可切换</small></div>
                 <div className="category-tabs" role="group" aria-label="开销分类">{(Object.keys(categoryMeta) as Category[]).map((name) => { const Icon = categoryMeta[name].icon; return <button key={name} aria-label={`${name}开销`} className={category === name ? "selected" : ""} onClick={() => setCategory(name)}><Icon weight={category === name ? "fill" : "regular"} /><span>{name}</span></button>; })}</div>
                 <div className="category-hint"><span style={{ background: categoryMeta[category].color }} />正在记录：<strong>{category}</strong> · {categoryMeta[category].hint}</div>
                 <label className="amount-input"><span>¥</span><input aria-label="金额" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" /></label>
@@ -593,7 +639,7 @@ export default function Home() {
       {showImport && <ImportModal importText={importText} setImportText={setImportText} onClose={() => setShowImport(false)} onImport={importSchedule} onFile={readFile} fileInput={fileInput} />}
       {showShare && <ShareModal members={members} identity={identity} code={shareCode} state={syncState} onClose={() => setShowShare(false)} onCopy={copyInvite} onRename={updateMemberName} />}
       {showDates && <DateRangeModal trip={trip} onClose={() => setShowDates(false)} onSave={saveTripDates} />}
-      {activeHistory && <HistoryModal history={activeHistory} onClose={() => setActiveHistory(null)} />}
+      {activeHistory && <HistoryModal history={activeHistory} onClose={() => setActiveHistory(null)} onUpdate={updateHistory} onRefresh={refreshHistory} onDelete={deleteHistory} />}
       {editingExpense && <ExpenseEditModal expense={editingExpense} maxDay={calendarDays.length} onClose={() => setEditingExpense(null)} onSave={updateExpense} onDelete={deleteExpense} />}
       {photoToDelete && <PhotoDeleteModal photo={photoToDelete} onClose={() => setPhotoToDelete(null)} onDelete={() => deletePhoto(photoToDelete)} />}
       {posterPreview && <PosterPreviewModal preview={posterPreview} onClose={closePosterPreview} />}
@@ -615,8 +661,8 @@ function LedgerView({ expenses, grouped, maxCategory, total, budget, calendarDay
 }
 
 function HistoryView({ histories, canArchive, onArchive, onOpen }: { histories: TripHistory[]; canArchive: boolean; onArchive: () => void; onOpen: (history: TripHistory) => void }) {
-  if (!histories.length) return <section className="history-view"><div className="history-empty"><span className="modal-icon"><MapTrifold /></span><strong>还没有过去的旅程</strong><p>设置旅行日期并记录行程后，可以把当前旅程完整保存到这里，之后仍能打开查看照片、日程和账单。</p><button disabled={!canArchive} onClick={onArchive}><Receipt />{canArchive ? "保存当前旅程" : "先记录一段旅程"}</button></div></section>;
-  return <section className="history-view"><div className="history-toolbar"><div><span>TRIP ARCHIVE</span><h2>{histories.length} 段被好好保存的旅程</h2></div><button disabled={!canArchive} onClick={onArchive}><Receipt />保存当前旅程</button></div><div className="history-cards">{histories.map((history, index) => { const total = history.snapshot.expenses.reduce((sum, item) => sum + Number(item.amount), 0); return <button className={`history-card tone-${index % 3}`} key={history.id} onClick={() => onOpen(history)}><span>{history.startDate || "未设日期"} — {history.endDate || ""}</span><strong>{history.title}</strong><small><MapPin weight="fill" />{history.destination || "待定目的地"}</small><div><span>{history.snapshot.plan.length} 项行程 · {history.snapshot.photos.length} 张照片</span><b>¥{money(total)}</b></div></button>; })}</div></section>;
+  if (!histories.length) return <section className="history-view"><div className="history-empty"><span className="modal-icon"><MapTrifold /></span><strong>还没有过去的旅程</strong><p>旅行途中也可以随时保存当前快照，不必等到旅程结束。之后打开它，还能继续同步最新日程、账单和照片。</p><button disabled={!canArchive} onClick={onArchive}><Receipt />{canArchive ? "保存当前快照" : "先记录一段旅程"}</button></div></section>;
+  return <section className="history-view"><div className="history-toolbar"><div><span>TRIP ARCHIVE</span><h2>{histories.length} 段被好好保存的旅程</h2><p>这里保存的是旅程快照；打开任意一段，可同步当前记录、编辑或删除。</p></div><button disabled={!canArchive} onClick={onArchive}><Receipt />保存当前快照</button></div><div className="history-cards">{histories.map((history, index) => { const total = history.snapshot.expenses.reduce((sum, item) => sum + Number(item.amount), 0); return <button className={`history-card tone-${index % 3}`} key={history.id} onClick={() => onOpen(history)}><span>{history.startDate || "未设日期"} — {history.endDate || ""}</span><strong>{history.title}</strong><small><MapPin weight="fill" />{history.destination || "待定目的地"}</small><div><span>{history.snapshot.plan.length} 项行程 · {history.snapshot.photos.length} 张照片 · {history.snapshot.expenses.length} 笔账单</span><b>¥{money(total)}</b></div></button>; })}</div></section>;
 }
 
 function DateRangeModal({ trip, onClose, onSave }: { trip: Trip; onClose: () => void; onSave: (values: { title: string; destination: string; startDate: string; endDate: string }) => void }) {
@@ -627,10 +673,21 @@ function DateRangeModal({ trip, onClose, onSave }: { trip: Trip; onClose: () => 
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal date-modal" role="dialog" aria-modal="true" aria-labelledby="date-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><CalendarBlank /></span><h2 id="date-title">这趟旅行，从哪天到哪天？</h2><p>日期范围决定顶部可以滑动浏览多少天，过去和未来的日期都支持。</p><div className="trip-fields"><label><span>旅程名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：我们的毕业旅行" /></label><label><span>目的地</span><input value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="由你填写真实目的地" /></label><div><label><span>出发日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><i>到</i><label><span>返程日期</span><input type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} /></label></div></div><button className="confirm-import range-save" onClick={() => onSave({ title: title.trim() || "我的新旅程", destination: destination.trim() || "待定目的地", startDate, endDate })}>保存日期并开始浏览<ArrowRight /></button></section></div>;
 }
 
-function HistoryModal({ history, onClose }: { history: TripHistory; onClose: () => void }) {
+function HistoryModal({ history, onClose, onUpdate, onRefresh, onDelete }: { history: TripHistory; onClose: () => void; onUpdate: (history: TripHistory, values: { title: string; destination: string; startDate: string; endDate: string }) => void; onRefresh: (history: TripHistory) => void; onDelete: (history: TripHistory) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [title, setTitle] = useState(history.title);
+  const [destination, setDestination] = useState(history.destination);
+  const [startDate, setStartDate] = useState(history.startDate);
+  const [endDate, setEndDate] = useState(history.endDate);
   const groupedPlan = Array.from(new Set(history.snapshot.plan.map((item) => item.day))).sort((a, b) => a - b);
   const total = history.snapshot.expenses.reduce((sum, item) => sum + Number(item.amount), 0);
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="history-kicker">{history.startDate} — {history.endDate}</span><h2 id="history-title">{history.title}</h2><p><MapPin weight="fill" />{history.destination}</p><div className="history-overview"><div><span>日程</span><strong>{history.snapshot.plan.length}</strong></div><div><span>照片</span><strong>{history.snapshot.photos.length}</strong></div><div><span>总开销</span><strong>¥{money(total)}</strong></div></div><div className="archive-days">{groupedPlan.length ? groupedPlan.map((day) => <section key={day}><span>DAY {String(day).padStart(2, "0")}</span>{history.snapshot.plan.filter((item) => item.day === day).map((item) => <div key={item.id}><time>{item.time}</time><strong>{item.title}</strong><small>{item.place}</small></div>)}</section>) : <div className="archive-empty">这趟旅程没有保存日程项目</div>}</div></section></div>;
+  function saveInfo() {
+    if (!startDate || !endDate || endDate < startDate) return;
+    onUpdate(history, { title: title.trim() || "未命名旅程", destination: destination.trim() || "待定目的地", startDate, endDate });
+    setEditing(false);
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button>{editing ? <div className="history-edit-fields"><label><span>旅程名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>目的地</span><input value={destination} onChange={(event) => setDestination(event.target.value)} /></label><div><label><span>出发日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>返程日期</span><input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div><div className="history-edit-actions"><button className="file-button" onClick={() => setEditing(false)}>取消</button><button className="confirm-import" onClick={saveInfo}>保存修改</button></div></div> : <><span className="history-kicker">{history.startDate} — {history.endDate}</span><h2 id="history-title">{history.title}</h2><p><MapPin weight="fill" />{history.destination}</p></>}<div className="history-snapshot-note">这是一份独立快照，不会被当前账单自动覆盖。旅行中可随时点击“同步当前记录”更新它。</div><div className="history-modal-actions"><button onClick={() => onRefresh(history)}><Clock />同步当前记录</button><button onClick={() => setEditing(true)}><PencilSimple />编辑信息</button><button className={`history-delete ${confirmDelete ? "confirming" : ""}`} onClick={() => confirmDelete ? onDelete(history) : setConfirmDelete(true)}><Trash />{confirmDelete ? "确认删除" : "删除旅程"}</button></div><div className="history-overview"><div><span>日程</span><strong>{history.snapshot.plan.length}</strong></div><div><span>照片</span><strong>{history.snapshot.photos.length}</strong></div><div><span>总开销</span><strong>¥{money(total)}</strong></div></div><div className="archive-days">{groupedPlan.length ? groupedPlan.map((day) => <section key={day}><span>DAY {String(day).padStart(2, "0")}</span>{history.snapshot.plan.filter((item) => item.day === day).map((item) => <div key={item.id}><time>{item.time}</time><strong>{item.title}</strong><small>{item.place}</small></div>)}</section>) : <div className="archive-empty">这趟旅程没有保存日程项目</div>}</div><div className="archive-expenses"><span>保存的账单 · {history.snapshot.expenses.length} 笔</span>{history.snapshot.expenses.length ? history.snapshot.expenses.map((item) => <div key={item.id}><span>第 {item.day} 天 · {item.category}</span><strong>{item.title}</strong><b>¥{money(item.amount)}</b></div>) : <div className="archive-empty">这份快照还没有账单记录</div>}</div></section></div>;
 }
 
 function ExpenseEditModal({ expense, maxDay, onClose, onSave, onDelete }: { expense: Expense; maxDay: number; onClose: () => void; onSave: (expense: Expense) => void; onDelete: (expense: Expense) => void }) {

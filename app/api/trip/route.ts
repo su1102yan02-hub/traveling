@@ -59,6 +59,25 @@ export async function POST(request: Request) {
         "INSERT INTO trip_archives (id, title, destination, start_date, end_date, snapshot_json, archived_at) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)",
         [archiveId, trip.title || "未命名旅程", trip.destination || "待定目的地", trip.startDate || "", trip.endDate || "", JSON.stringify({ trip, expenses: snapshot.expenses, plan: snapshot.plan, photos: snapshot.photos }), new Date().toISOString()],
       );
+    } else if (payload.action === "update_archive") {
+      const id = Number(payload.id);
+      if (!id) return Response.json({ error: "缺少历史旅程编号" }, { status: 400 });
+      await sql.query(
+        "UPDATE trip_archives SET title = $1, destination = $2, start_date = $3, end_date = $4 WHERE id = $5",
+        [String(payload.title || "未命名旅程").slice(0, 80), String(payload.destination || "待定目的地").slice(0, 80), String(payload.startDate || ""), String(payload.endDate || ""), id],
+      );
+    } else if (payload.action === "refresh_archive") {
+      const id = Number(payload.id);
+      if (!id) return Response.json({ error: "缺少历史旅程编号" }, { status: 400 });
+      const snapshot = await readSharedTrip();
+      await sql.query(
+        "UPDATE trip_archives SET snapshot_json = $1::jsonb, archived_at = $2 WHERE id = $3",
+        [JSON.stringify({ trip: snapshot.trip, expenses: snapshot.expenses, plan: snapshot.plan, photos: snapshot.photos }), new Date().toISOString(), id],
+      );
+    } else if (payload.action === "delete_archive") {
+      const id = Number(payload.id);
+      if (!id) return Response.json({ error: "缺少历史旅程编号" }, { status: 400 });
+      await sql.query("DELETE FROM trip_archives WHERE id = $1", [id]);
     } else if (payload.action === "set_day_photo") {
       await sql.transaction([
         sql.query("DELETE FROM day_photos WHERE trip_id = $1 AND day = $2", [TRIP_ID, payload.day]),

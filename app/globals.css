@@ -115,9 +115,10 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .add-title strong, .add-title small { display: block; }
 .add-title strong { font-size: 18px; }
 .add-title small { font-size: 11px; color: #58705f; margin-top: 1px; }
-.expense-day-picker { margin-top: 18px; display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 7px; color: #526b5c; font-size: 10px; position: relative; z-index: 1; }
-.expense-day-picker svg { width: 16px; height: 16px; }
-.expense-day-picker select { width: 100%; border: 1px solid rgba(24,63,50,.2); background: rgba(255,255,255,.52); color: var(--ink); border-radius: 9px; padding: 8px 30px 8px 10px; cursor: pointer; }
+.record-day-indicator { margin-top: 18px; display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 7px; color: #3f5e4d; font-size: 10px; position: relative; z-index: 1; }
+.record-day-indicator svg { width: 16px; height: 16px; }
+.record-day-indicator span { font-weight: 700; }
+.record-day-indicator small { color: #647d6c; text-align: right; }
 .category-tabs { display: grid; grid-template-columns: repeat(5,1fr); gap: 5px; margin: 22px 0 18px; position: relative; z-index: 1; }
 .category-tabs button { border: 1px solid rgba(24,63,50,.18); color: #496454; background: rgba(255,255,255,.25); border-radius: 10px; padding: 8px 3px 7px; cursor: pointer; display: grid; place-items: center; gap: 4px; font-size: 10px; transition: .18s ease; }
 .category-tabs button svg { width: 18px; height: 18px; }
@@ -256,6 +257,7 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .history-toolbar { border-top: 1px solid #ccd5cd; padding: 24px 0 28px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
 .history-toolbar span, .history-kicker { color: var(--green); font: 9px var(--font-geist-mono), monospace; letter-spacing: .13em; }
 .history-toolbar h2 { margin: 6px 0 0; font-size: clamp(24px,3vw,38px); letter-spacing: -.045em; }
+.history-toolbar p { margin: 7px 0 0; color: var(--muted); font-size: 11px; }
 .history-toolbar > button { border: 0; border-radius: 999px; background: var(--green-dark); color: white; padding: 10px 14px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .history-toolbar button:disabled, .history-empty button:disabled { opacity: .42; cursor: not-allowed; }
 .history-cards { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
@@ -343,6 +345,20 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .history-modal { width: min(720px,100%); max-height: min(760px,calc(100vh - 40px)); overflow-y: auto; }
 .history-modal > p { display: flex; align-items: center; gap: 5px; }
 .history-modal > p svg { width: 13px; }
+.history-snapshot-note { margin-top: 15px; border-left: 3px solid var(--lime); background: #edf1e7; padding: 10px 12px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.history-modal-actions { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 8px; margin-top: 11px; }
+.history-modal-actions button { min-height: 38px; border: 1px solid #bdc9c0; border-radius: 10px; background: white; color: var(--green-dark); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; font-size: 10px; font-weight: 650; }
+.history-modal-actions button:first-child { border-color: var(--green-dark); background: var(--green-dark); color: white; }
+.history-modal-actions svg { width: 14px; height: 14px; }
+.history-modal-actions .history-delete { color: #9b3e35; }
+.history-modal-actions .history-delete.confirming { border-color: #9b3e35; background: #9b3e35; color: white; }
+.history-edit-fields { display: grid; gap: 10px; padding-right: 32px; }
+.history-edit-fields > label, .history-edit-fields > div > label { display: grid; gap: 5px; }
+.history-edit-fields label span { color: var(--muted); font-size: 9px; }
+.history-edit-fields input { width: 100%; border: 1px solid #c5d0c7; border-radius: 9px; background: white; padding: 9px 10px; color: var(--ink); }
+.history-edit-fields > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.history-edit-fields .history-edit-actions { grid-template-columns: 1fr 2fr; margin-top: 2px; }
+.history-edit-actions button { min-height: 38px; border-radius: 9px; cursor: pointer; }
 .history-overview { margin: 18px 0; display: grid; grid-template-columns: repeat(3,1fr); border: 1px solid var(--line); border-radius: 12px; background: white; }
 .history-overview > div { padding: 14px; border-right: 1px solid var(--line); }
 .history-overview > div:last-child { border-right: 0; }
@@ -356,6 +372,12 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .archive-days time, .archive-days small { color: var(--muted); font-size: 9px; }
 .archive-days strong { font-size: 12px; }
 .archive-empty { padding: 30px; border: 1px dashed #bdc9c0; border-radius: 12px; text-align: center; color: var(--muted); font-size: 11px; }
+.archive-expenses { margin-top: 20px; padding-top: 13px; border-top: 1px solid #d6ddd7; display: grid; gap: 2px; }
+.archive-expenses > span { margin-bottom: 5px; color: var(--green); font: 9px var(--font-geist-mono), monospace; letter-spacing: .05em; }
+.archive-expenses > div:not(.archive-empty) { display: grid; grid-template-columns: 105px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px dashed #d6ddd7; }
+.archive-expenses div span { color: var(--muted); font-size: 9px; }
+.archive-expenses div strong { font-size: 11px; }
+.archive-expenses div b { font-size: 11px; }
 .modal-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; }
 .modal-actions button { border-radius: 10px; padding: 10px 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; font-weight: 650; }
 .file-button { border: 1px solid #bfcac1; background: transparent; }
@@ -444,6 +466,9 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
   .trip-cards { grid-template-columns: 1fr; }
   .history-cards { grid-template-columns: 1fr; }
   .history-toolbar { align-items: flex-start; flex-direction: column; }
+  .history-modal-actions { grid-template-columns: 1fr; }
+  .history-edit-fields { padding-right: 0; }
+  .archive-expenses > div:not(.archive-empty) { grid-template-columns: 82px 1fr auto; }
   .past-trip { min-height: 190px; }
   .category-tabs button span { display: none; }
   .category-tabs button { padding: 9px 2px; }
