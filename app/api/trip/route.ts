@@ -23,8 +23,8 @@ export async function POST(request: Request) {
     if (payload.action === "add_expense") {
       const item = payload.item as Payload;
       await sql.query(
-        "INSERT INTO expenses (id, trip_id, category, title, amount, time, day, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET category = EXCLUDED.category, title = EXCLUDED.title, amount = EXCLUDED.amount, time = EXCLUDED.time, day = EXCLUDED.day, created_by = EXCLUDED.created_by",
-        [item.id, TRIP_ID, item.category, item.title, item.amount, item.time, item.day, "我"],
+        "INSERT INTO expenses (id, trip_id, category, title, amount, time, day, created_by, occurred_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET category = EXCLUDED.category, title = EXCLUDED.title, amount = EXCLUDED.amount, time = EXCLUDED.time, day = EXCLUDED.day, created_by = EXCLUDED.created_by, occurred_at = EXCLUDED.occurred_at",
+        [item.id, TRIP_ID, item.category, item.title, item.amount, item.time, item.day, String(item.createdBy || "同行旅伴").slice(0, 20), new Date().toISOString()],
       );
     } else if (payload.action === "update_expense") {
       const item = payload.item as Payload;
@@ -64,6 +64,16 @@ export async function POST(request: Request) {
         sql.query("DELETE FROM day_photos WHERE trip_id = $1 AND day = $2", [TRIP_ID, payload.day]),
         sql.query("INSERT INTO day_photos (trip_id, day, place, url, source_type, object_key) VALUES ($1, $2, $3, $4, $5, $6)", [TRIP_ID, payload.day, payload.place || "行程地点", payload.url, payload.sourceType || "library", null]),
       ]);
+    } else if (payload.action === "upsert_member") {
+      const member = payload.member as Payload;
+      const deviceId = String(member.deviceId || "").slice(0, 80);
+      if (!deviceId) return Response.json({ error: "缺少成员身份" }, { status: 400 });
+      const name = String(member.name || "同行旅伴").trim().slice(0, 20) || "同行旅伴";
+      const color = /^#[0-9a-f]{6}$/i.test(String(member.color || "")) ? String(member.color) : "#2f6b55";
+      await sql.query(
+        "INSERT INTO trip_members (trip_id, device_id, name, color, last_seen) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (trip_id, device_id) WHERE device_id IS NOT NULL DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, last_seen = EXCLUDED.last_seen",
+        [TRIP_ID, deviceId, name, color, new Date().toISOString()],
+      );
     } else {
       return Response.json({ error: "未知操作" }, { status: 400 });
     }

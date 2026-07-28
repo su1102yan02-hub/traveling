@@ -27,8 +27,11 @@ async function initializeSchema(sql: SqlClient) {
     sql.query("CREATE TABLE IF NOT EXISTS day_photos (id BIGSERIAL PRIMARY KEY, trip_id TEXT NOT NULL, day INTEGER NOT NULL, place TEXT NOT NULL, url TEXT NOT NULL, source_type TEXT NOT NULL, object_key TEXT)"),
     sql.query("CREATE TABLE IF NOT EXISTS trip_settings (trip_id TEXT PRIMARY KEY, start_date TEXT NOT NULL, end_date TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL)"),
     sql.query("CREATE TABLE IF NOT EXISTS trip_archives (id BIGINT PRIMARY KEY, title TEXT NOT NULL, destination TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, snapshot_json JSONB NOT NULL, archived_at TIMESTAMPTZ NOT NULL)"),
+    sql.query("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ"),
+    sql.query("ALTER TABLE trip_members ADD COLUMN IF NOT EXISTS device_id TEXT"),
     sql.query("CREATE INDEX IF NOT EXISTS expenses_trip_idx ON expenses (trip_id, id DESC)"),
     sql.query("CREATE INDEX IF NOT EXISTS plans_trip_day_idx ON plans (trip_id, day, time)"),
+    sql.query("CREATE UNIQUE INDEX IF NOT EXISTS trip_members_trip_device_idx ON trip_members (trip_id, device_id) WHERE device_id IS NOT NULL"),
     sql.query(
       "INSERT INTO trips (id, share_code, title, destination, budget, created_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (share_code) DO NOTHING",
       [TRIP_ID, DEFAULT_SHARE_CODE, "我的新旅程", "添加目的地", 0, new Date().toISOString()],
@@ -59,9 +62,9 @@ export async function readSharedTrip() {
   if (!trip) throw new Error("Shared trip not found");
 
   const [expenseRows, planRows, memberRows, photoRows, settingRows, archiveRows] = await Promise.all([
-    sql.query("SELECT id, category, title, amount, time, day, created_by AS \"createdBy\" FROM expenses WHERE trip_id = $1 ORDER BY id DESC", [TRIP_ID]),
+    sql.query("SELECT id, category, title, amount, time, day, created_by AS \"createdBy\", occurred_at AS \"occurredAt\" FROM expenses WHERE trip_id = $1 ORDER BY id DESC", [TRIP_ID]),
     sql.query("SELECT id, time, title, place, day, done FROM plans WHERE trip_id = $1 ORDER BY day, time", [TRIP_ID]),
-    sql.query("SELECT name, color FROM trip_members WHERE trip_id = $1 ORDER BY id", [TRIP_ID]),
+    sql.query("SELECT device_id AS \"deviceId\", name, color, last_seen AS \"lastSeen\" FROM trip_members WHERE trip_id = $1 ORDER BY last_seen DESC LIMIT 20", [TRIP_ID]),
     sql.query("SELECT id, day, place, url, source_type AS \"sourceType\" FROM day_photos WHERE trip_id = $1 ORDER BY id DESC", [TRIP_ID]),
     sql.query("SELECT start_date AS \"startDate\", end_date AS \"endDate\" FROM trip_settings WHERE trip_id = $1", [TRIP_ID]),
     sql.query("SELECT id, title, destination, start_date AS \"startDate\", end_date AS \"endDate\", snapshot_json AS \"snapshotJson\", archived_at AS \"archivedAt\" FROM trip_archives ORDER BY archived_at DESC"),

@@ -9,9 +9,9 @@ import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect,
 
 type Category = "交通" | "住宿" | "餐饮" | "门票" | "其他";
 type View = "journey" | "ledger" | "history";
-type Expense = { id: number; category: Category; title: string; amount: number; time: string; day: number; createdBy?: string };
+type Expense = { id: number; category: Category; title: string; amount: number; time: string; day: number; createdBy?: string; occurredAt?: string };
 type PlanItem = { id: number; time: string; title: string; place: string; day: number; done?: boolean };
-type Member = { name: string; color: string };
+type Member = { deviceId: string; name: string; color: string; lastSeen?: string };
 type DayPhoto = { id: number; day: number; place: string; url: string; sourceType: string };
 type Trip = { id?: string; title: string; destination: string; startDate?: string; endDate?: string };
 type TripHistory = { id: number; title: string; destination: string; startDate: string; endDate: string; archivedAt: string; snapshot: { expenses: Expense[]; plan: PlanItem[]; photos: DayPhoto[] } };
@@ -27,7 +27,7 @@ const categoryMeta: Record<Category, { color: string; icon: typeof Train; hint: 
 
 const starterExpenses: Expense[] = [];
 const starterPlan: PlanItem[] = [];
-const starterMembers: Member[] = [{ name: "我", color: "#2f6b55" }];
+const starterMembers: Member[] = [];
 const heroSlides = [
   { src: "/photos/chiang-mai-street.jpg", eyebrow: "CITY WANDER", title: "走进一座城的日常", place: "街巷、晨光与慢下来的脚步" },
   { src: "/photos/chiang-mai-temple.jpg", eyebrow: "GOLDEN HOUR", title: "把日落留给山顶", place: "寺庙、晚风与远处的天际线" },
@@ -38,6 +38,22 @@ const heroSlides = [
 ];
 
 const money = (value: number) => new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(value);
+
+const memberColors = ["#2f6b55", "#d66d49", "#537ca6", "#8b6b82", "#b98725", "#467f79"];
+
+function createMemberIdentity(): Member {
+  const deviceId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `device-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const suffix = deviceId.replace(/\D/g, "").slice(-4) || deviceId.replace(/-/g, "").slice(-4).toUpperCase();
+  const colorIndex = Array.from(deviceId).reduce((sum, character) => sum + character.charCodeAt(0), 0) % memberColors.length;
+  return { deviceId, name: `旅伴 ${suffix}`, color: memberColors[colorIndex] };
+}
+
+function formatExpenseMoment(expense: Expense) {
+  if (!expense.occurredAt) return expense.time || "时间未记录";
+  const date = new Date(expense.occurredAt);
+  if (Number.isNaN(date.getTime())) return expense.time || "时间未记录";
+  return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date).replaceAll("/", "-");
+}
 
 const PHOTO_UPLOAD_TARGET = 850 * 1024;
 
@@ -195,10 +211,11 @@ export default function Home() {
   const [expenses, setExpenses] = useState<Expense[]>(starterExpenses);
   const [plan, setPlan] = useState<PlanItem[]>(starterPlan);
   const [members, setMembers] = useState<Member[]>(starterMembers);
+  const [identity, setIdentity] = useState<Member | null>(null);
   const [photos, setPhotos] = useState<DayPhoto[]>([]);
   const [trip, setTrip] = useState<Trip>({ title: "我的新旅程", destination: "待定目的地" });
   const [histories, setHistories] = useState<TripHistory[]>([]);
-  const [selectedDay, setSelectedDay] = useState(3);
+  const [selectedDay, setSelectedDay] = useState(1);
   const [category, setCategory] = useState<Category>("餐饮");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -225,7 +242,7 @@ export default function Home() {
     if (data.trip) setTrip(data.trip);
     if (data.expenses) setExpenses(data.expenses);
     if (data.plan) setPlan(data.plan);
-    if (data.members) setMembers([...data.members, { name: "我", color: "#2f6b55" }]);
+    if (data.members) setMembers(data.members);
     if (data.photos) setPhotos(data.photos);
     if (data.histories) setHistories(data.histories);
     setSyncState("synced");
@@ -246,6 +263,38 @@ export default function Home() {
     const timer = window.setInterval(refreshTrip, 5000);
     return () => window.clearInterval(timer);
   }, [refreshTrip]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("traveling-member");
+      const parsed = saved ? JSON.parse(saved) as Member : null;
+      if (parsed?.deviceId && parsed.name && parsed.color) setIdentity(parsed);
+      else {
+        const created = createMemberIdentity();
+        window.localStorage.setItem("traveling-member", JSON.stringify(created));
+        setIdentity(created);
+      }
+    } catch {
+      setIdentity(createMemberIdentity());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!identity) return;
+    let cancelled = false;
+    async function syncMember() {
+      try {
+        const response = await fetch("/api/trip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "upsert_member", member: identity }) });
+        if (!response.ok) throw new Error("member sync failed");
+        if (!cancelled) applySnapshot(await response.json());
+      } catch {
+        if (!cancelled) setSyncState("offline");
+      }
+    }
+    syncMember();
+    const timer = window.setInterval(syncMember, 60000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [applySnapshot, identity]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setHeroSlide((current) => (current + 1) % heroSlides.length), 6000);
@@ -294,13 +343,14 @@ export default function Home() {
 
   function startDayDrag(event: ReactPointerEvent<HTMLDivElement>) {
     const element = dayScroll.current; if (!element) return;
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
     dragState.current = { active: true, moved: false, x: event.clientX, scrollLeft: element.scrollLeft };
     element.setPointerCapture(event.pointerId);
   }
 
   function moveDayDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (!dragState.current.active || !dayScroll.current) return;
-    if (Math.abs(event.clientX - dragState.current.x) > 4) dragState.current.moved = true;
+    if (Math.abs(event.clientX - dragState.current.x) > 4) { dragState.current.moved = true; event.preventDefault(); }
     dayScroll.current.scrollLeft = dragState.current.scrollLeft - (event.clientX - dragState.current.x);
   }
 
@@ -328,7 +378,9 @@ export default function Home() {
   function addExpense() {
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) return flash("先填一个有效金额");
-    const item: Expense = { id: Date.now(), category, title: note.trim() || `${category}开销`, amount: numericAmount, time: "刚刚", day: selectedDay, createdBy: "我" };
+    const now = new Date();
+    const time = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+    const item: Expense = { id: now.getTime(), category, title: note.trim() || `${category}开销`, amount: numericAmount, time, occurredAt: now.toISOString(), day: selectedDay, createdBy: identity?.name || "同行旅伴" };
     setExpenses((current) => [item, ...current]);
     setAmount(""); setNote(""); flash(`已记下 ¥${money(numericAmount)}`);
     postTrip({ action: "add_expense", item });
@@ -448,6 +500,17 @@ export default function Home() {
     flash("同行邀请链接已复制");
   }
 
+  function updateMemberName(value: string) {
+    if (!identity) return;
+    const name = value.trim().slice(0, 20);
+    if (!name) return flash("请输入你的同行昵称");
+    const updated = { ...identity, name };
+    setIdentity(updated);
+    window.localStorage.setItem("traveling-member", JSON.stringify(updated));
+    postTrip({ action: "upsert_member", member: updated });
+    flash("同行昵称已更新");
+  }
+
   const headings: Record<View, string> = { journey: "今天，先去想去的地方。", ledger: "账单", history: "过去的旅程" };
   const activeHero = heroSlides[heroSlide];
 
@@ -491,7 +554,7 @@ export default function Home() {
               <div className="date-range-bar"><div><CalendarBlank /><span>{trip.startDate ? `${trip.startDate} — ${trip.endDate}` : "先选择整趟旅行的日期"}</span><small>{calendarDays.length} 天行程</small></div><button onClick={() => setShowDates(true)}>{trip.startDate ? "修改日期" : "选择日期"}</button></div>
               <div className="day-strip">
                 <div className="day-scroll" ref={dayScroll} onPointerDown={startDayDrag} onPointerMove={moveDayDrag} onPointerUp={endDayDrag} onPointerCancel={endDayDrag} onPointerLeave={endDayDrag}>
-                  {calendarDays.map((item) => <button key={`${item.day}-${item.iso}`} className={selectedDay === item.day ? "active" : ""} onClick={() => selectCalendarDay(item.day)}><span>{item.weekday}</span><strong>{item.date}</strong><small>{item.month} {item.label}</small></button>)}
+                  {calendarDays.map((item) => <button type="button" key={`${item.day}-${item.iso}`} aria-pressed={selectedDay === item.day} className={selectedDay === item.day ? "active" : ""} onClick={() => selectCalendarDay(item.day)}><span>{item.weekday}</span><strong>{item.date}</strong><small>{item.month} {item.label}</small></button>)}
                 </div>
                 <div className="day-summary"><span>第 {selectedDay} 天已记</span><strong>{expenses.filter((item) => item.day === selectedDay).length} 笔</strong><small>拖动浏览全部日期</small></div>
               </div>
@@ -505,6 +568,7 @@ export default function Home() {
 
               <div className="add-expense">
                 <div className="add-title"><span><Plus weight="bold" /></span><div><strong>随手记一笔</strong><small>先选是什么，再填金额</small></div></div>
+                <label className="expense-day-picker"><CalendarBlank /><span>记在</span><select aria-label="选择开销所属日期" value={selectedDay} onChange={(event) => setSelectedDay(Number(event.target.value))}>{calendarDays.map((item) => <option key={item.day} value={item.day}>第 {item.day} 天{item.iso ? ` · ${item.iso}` : ""}</option>)}</select></label>
                 <div className="category-tabs" role="group" aria-label="开销分类">{(Object.keys(categoryMeta) as Category[]).map((name) => { const Icon = categoryMeta[name].icon; return <button key={name} aria-label={`${name}开销`} className={category === name ? "selected" : ""} onClick={() => setCategory(name)}><Icon weight={category === name ? "fill" : "regular"} /><span>{name}</span></button>; })}</div>
                 <div className="category-hint"><span style={{ background: categoryMeta[category].color }} />正在记录：<strong>{category}</strong> · {categoryMeta[category].hint}</div>
                 <label className="amount-input"><span>¥</span><input aria-label="金额" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))} placeholder="0.00" /></label>
@@ -522,12 +586,12 @@ export default function Home() {
           </>
         )}
 
-        {view === "ledger" && <LedgerView expenses={expenses} grouped={grouped} maxCategory={maxCategory} total={total} budget={0} daySpent={daySpent} selectedDay={selectedDay} onEdit={setEditingExpense} />}
+        {view === "ledger" && <LedgerView expenses={expenses} grouped={grouped} maxCategory={maxCategory} total={total} budget={0} daySpent={daySpent} selectedDay={selectedDay} calendarDays={calendarDays} onEdit={setEditingExpense} />}
         {view === "history" && <HistoryView histories={histories} canArchive={Boolean(plan.length || expenses.length || photos.length)} onArchive={archiveTrip} onOpen={setActiveHistory} />}
       </section>
 
       {showImport && <ImportModal importText={importText} setImportText={setImportText} onClose={() => setShowImport(false)} onImport={importSchedule} onFile={readFile} fileInput={fileInput} />}
-      {showShare && <ShareModal members={members} code={shareCode} state={syncState} onClose={() => setShowShare(false)} onCopy={copyInvite} />}
+      {showShare && <ShareModal members={members} identity={identity} code={shareCode} state={syncState} onClose={() => setShowShare(false)} onCopy={copyInvite} onRename={updateMemberName} />}
       {showDates && <DateRangeModal trip={trip} onClose={() => setShowDates(false)} onSave={saveTripDates} />}
       {activeHistory && <HistoryModal history={activeHistory} onClose={() => setActiveHistory(null)} />}
       {editingExpense && <ExpenseEditModal expense={editingExpense} maxDay={calendarDays.length} onClose={() => setEditingExpense(null)} onSave={updateExpense} onDelete={deleteExpense} />}
@@ -540,11 +604,11 @@ export default function Home() {
 
 function EmptyPlan({ onImport }: { onImport: () => void }) { return <div className="empty-plan"><MapTrifold /><strong>这一天还很自由</strong><span>导入日程，给旅途一个轻轻的方向。</span><button onClick={onImport}>导入日程</button></div>; }
 
-function LedgerView({ expenses, grouped, maxCategory, total, budget, onEdit }: { expenses: Expense[]; grouped: { name: Category; value: number }[]; maxCategory: number; total: number; budget: number; daySpent: number; selectedDay: number; onEdit: (expense: Expense) => void }) {
+function LedgerView({ expenses, grouped, maxCategory, total, budget, calendarDays, onEdit }: { expenses: Expense[]; grouped: { name: Category; value: number }[]; maxCategory: number; total: number; budget: number; daySpent: number; selectedDay: number; calendarDays: CalendarDay[]; onEdit: (expense: Expense) => void }) {
   return <section className="ledger-view">
     <div className="ledger-intro"><span>共享账本</span></div>
     <div className="ledger-grid">
-      <div className="expense-list ledger-list"><div className="section-title"><div><Clock /><h2>全部开销</h2></div><span>{expenses.length} 笔</span></div>{expenses.length ? expenses.map((item) => { const Icon = categoryMeta[item.category].icon; return <div className="expense-row" key={item.id}><span className="expense-icon" style={{ color: categoryMeta[item.category].color }}><Icon weight="fill" /></span><div><strong>{item.title}</strong><span>{item.category} · 第 {item.day} 天 · {item.time} · {item.createdBy || "我"}</span></div><b>− ¥{money(item.amount)}</b><button className="expense-edit" aria-label={`修改 ${item.title}`} onClick={() => onEdit(item)}><PencilSimple /></button></div>; }) : <div className="ledger-empty"><Receipt /><strong>还没有开销记录</strong><span>旅途中记下的第一笔，会出现在这里。</span></div>}</div>
+      <div className="expense-list ledger-list"><div className="section-title"><div><Clock /><h2>全部开销</h2></div><span>{expenses.length} 笔</span></div>{expenses.length ? expenses.map((item) => { const Icon = categoryMeta[item.category].icon; const tripDate = calendarDays.find((day) => day.day === item.day)?.iso; return <div className="expense-row" key={item.id}><span className="expense-icon" style={{ color: categoryMeta[item.category].color }}><Icon weight="fill" /></span><div><strong>{item.title}</strong><span>{item.category} · 第 {item.day} 天{tripDate ? `（${tripDate}）` : ""} · 记于 {formatExpenseMoment(item)} · {item.createdBy || "同行旅伴"}</span></div><b>− ¥{money(item.amount)}</b><button className="expense-edit" aria-label={`修改 ${item.title}`} onClick={() => onEdit(item)}><PencilSimple /></button></div>; }) : <div className="ledger-empty"><Receipt /><strong>还没有开销记录</strong><span>旅途中记下的第一笔，会出现在这里。</span></div>}</div>
       <div className="spend-summary"><div className="summary-heading"><span>本次总开销</span><span className="live-dot">同行实时汇总</span></div><div className="total-line"><span>¥</span><strong>{money(total)}</strong><small>{budget ? `/ 预算 ¥${money(budget)}` : "/ 未设置预算"}</small></div><div className="budget-track"><span style={{ width: budget ? `${Math.min((total / budget) * 100, 100)}%` : "0%" }} /></div><div className="budget-caption"><span>{budget ? `预算用了 ${Math.round((total / budget) * 100)}%` : "添加预算后可查看进度"}</span><span>{budget ? `还可花 ¥${money(Math.max(budget - total, 0))}` : ""}</span></div><div className="category-bars">{grouped.map((item) => { const Icon = categoryMeta[item.name].icon; return <div className="bar-row" key={item.name}><span className="bar-label"><Icon />{item.name}</span><div><i style={{ width: `${(item.value / maxCategory) * 100}%`, background: categoryMeta[item.name].color }} /></div><strong>¥{money(item.value)}</strong></div>; })}</div></div>
     </div>
   </section>;
@@ -595,6 +659,7 @@ function ImportModal({ importText, setImportText, onClose, onImport, onFile, fil
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><UploadSimple /></span><h2 id="import-title">一次导入整趟行程</h2><p>用“第1天 / Day 1”分隔每天，再逐行填写时间、行程和地点。也支持 TXT、CSV、ICS 文件。</p><textarea value={importText} onChange={(event) => setImportText(event.target.value)} aria-label="待导入的多日行程" placeholder={"第1天\n09:30 古城散步｜塔佩门\n12:00 午餐｜古城北门\n\n第2天\n08:00 山间徒步｜素贴山\n18:30 看日落｜山顶观景台"} /><input ref={fileInput} type="file" accept=".txt,.csv,.ics,text/plain,text/calendar" onChange={onFile} hidden /><div className="modal-actions"><button className="file-button" onClick={() => fileInput.current?.click()}><UploadSimple />选择文件</button><button className="confirm-import" onClick={onImport}>导入整趟行程<ArrowRight /></button></div></section></div>;
 }
 
-function ShareModal({ members, code, state, onClose, onCopy }: { members: Member[]; code: string; state: string; onClose: () => void; onCopy: () => void }) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><UsersThree /></span><h2 id="share-title">一起看，同步记</h2><p>把邀请链接发给同行伙伴。大家打开同一旅程后，开销和日程会自动同步。</p><div className="share-code"><span>旅程码</span><strong>{code}</strong><button onClick={onCopy} aria-label="复制邀请链接"><Copy /></button></div><div className="member-list">{members.map((member, index) => <div key={`${member.name}-${index}`}><i style={{ background: member.color }}>{member.name.slice(0, 1)}</i><span>{member.name}</span><small>{member.name === "我" ? "当前设备" : "已加入"}</small></div>)}</div><div className={`sync-status ${state}`}><span />{state === "synced" ? "云端已同步" : state === "connecting" ? "正在同步" : "当前离线，恢复后会继续同步"}</div><button className="confirm-import share-button" onClick={onCopy}><LinkSimple />复制同行邀请链接</button></section></div>;
+function ShareModal({ members, identity, code, state, onClose, onCopy, onRename }: { members: Member[]; identity: Member | null; code: string; state: string; onClose: () => void; onCopy: () => void; onRename: (name: string) => void }) {
+  const [name, setName] = useState(identity?.name || "");
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal share-modal" role="dialog" aria-modal="true" aria-labelledby="share-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><UsersThree /></span><h2 id="share-title">一起看，同步记</h2><p>每台设备会登记为一位同行成员，账单会显示真实记录者。修改昵称后，同一设备下次仍会记住。</p><div className="member-profile"><label><span>我的同行昵称</span><input value={name} maxLength={20} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && onRename(name)} /></label><button onClick={() => onRename(name)}>保存昵称</button></div><div className="share-code"><span>旅程码</span><strong>{code}</strong><button onClick={onCopy} aria-label="复制邀请链接"><Copy /></button></div><div className="member-list">{members.map((member) => <div key={member.deviceId}><i style={{ background: member.color }}>{member.name.slice(0, 1)}</i><span>{member.name}</span><small>{member.deviceId === identity?.deviceId ? "当前设备" : "已同步"}</small></div>)}</div><div className={`sync-status ${state}`}><span />{state === "synced" ? "云端已同步" : state === "connecting" ? "正在同步" : "当前离线，恢复后会继续同步"}</div><button className="confirm-import share-button" onClick={onCopy}><LinkSimple />复制同行邀请链接</button></section></div>;
 }

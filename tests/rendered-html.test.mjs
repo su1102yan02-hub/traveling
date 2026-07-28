@@ -20,6 +20,10 @@ test("product metadata and main experience are configured", async () => {
   assert.match(page, /保存 PNG 图片/);
   assert.match(page, /update_expense/);
   assert.match(page, /delete_expense/);
+  assert.match(page, /expense-day-picker/);
+  assert.match(page, /occurredAt/);
+  assert.match(page, /traveling-member/);
+  assert.match(page, /upsert_member/);
   assert.doesNotMatch(page, /曼谷|宁曼|CNX/);
 });
 
@@ -36,11 +40,14 @@ test("shared persistence routes use Neon and Vercel Blob", async () => {
   assert.match(tripRoute, /add_expense/);
   assert.match(tripRoute, /replace_all_plan/);
   assert.match(tripRoute, /archive_trip/);
+  assert.match(tripRoute, /upsert_member/);
+  assert.match(tripRoute, /occurred_at/);
   assert.match(photoRoute, /@vercel\/blob/);
   assert.match(photoRoute, /put\(/);
   assert.match(photoRoute, /del\(/);
   assert.match(sharedTrip, /@neondatabase\/serverless/);
   assert.match(sharedTrip, /trip_archives/);
   assert.match(sharedTrip, /day_photos/);
+  assert.match(sharedTrip, /trip_members_trip_device_idx/);
   assert.doesNotMatch(`${tripRoute}${photoRoute}${sharedTrip}`, /cloudflare:workers|env\.PHOTOS|D1 database/);
 });

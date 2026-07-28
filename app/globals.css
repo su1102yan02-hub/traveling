@@ -115,6 +115,9 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .add-title strong, .add-title small { display: block; }
 .add-title strong { font-size: 18px; }
 .add-title small { font-size: 11px; color: #58705f; margin-top: 1px; }
+.expense-day-picker { margin-top: 18px; display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 7px; color: #526b5c; font-size: 10px; position: relative; z-index: 1; }
+.expense-day-picker svg { width: 16px; height: 16px; }
+.expense-day-picker select { width: 100%; border: 1px solid rgba(24,63,50,.2); background: rgba(255,255,255,.52); color: var(--ink); border-radius: 9px; padding: 8px 30px 8px 10px; cursor: pointer; }
 .category-tabs { display: grid; grid-template-columns: repeat(5,1fr); gap: 5px; margin: 22px 0 18px; position: relative; z-index: 1; }
 .category-tabs button { border: 1px solid rgba(24,63,50,.18); color: #496454; background: rgba(255,255,255,.25); border-radius: 10px; padding: 8px 3px 7px; cursor: pointer; display: grid; place-items: center; gap: 4px; font-size: 10px; transition: .18s ease; }
 .category-tabs button svg { width: 18px; height: 18px; }
@@ -144,7 +147,7 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .date-range-bar small { border-left: 1px solid #cad3cb; color: var(--muted); font-size: 9px; padding-left: 8px; font-weight: 500; }
 .date-range-bar > button { border: 0; border-bottom: 1px solid var(--green); background: transparent; color: var(--green); padding: 3px 1px; cursor: pointer; font-size: 10px; }
 .day-strip { display: grid; grid-template-columns: minmax(0,1fr) minmax(130px,.18fr); border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); overflow: hidden; }
-.day-scroll { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #b8c8be transparent; cursor: grab; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; }
+.day-scroll { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #b8c8be transparent; cursor: grab; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; touch-action: pan-x; -webkit-overflow-scrolling: touch; }
 .day-scroll:active { cursor: grabbing; }
 .day-scroll > button { flex: 0 0 clamp(105px,13vw,150px); min-height: 72px; scroll-snap-align: start; border: 0; border-right: 1px solid var(--line); background: transparent; padding: 13px 8px 12px; display: grid; grid-template-columns: auto auto; justify-content: center; align-items: baseline; column-gap: 7px; cursor: pointer; position: relative; transition: .2s ease; user-select: none; }
 .day-scroll button span { font-size: 10px; color: var(--muted); }
@@ -357,6 +360,11 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .modal-actions button { border-radius: 10px; padding: 10px 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; font-weight: 650; }
 .file-button { border: 1px solid #bfcac1; background: transparent; }
 .confirm-import { border: 1px solid var(--green-dark); background: var(--green-dark); color: white; flex: 1; }
+.member-profile { margin-bottom: 11px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
+.member-profile label { display: grid; gap: 5px; }
+.member-profile label span { color: var(--muted); font-size: 10px; }
+.member-profile input { min-width: 0; border: 1px solid #cbd5cd; background: white; border-radius: 10px; padding: 10px 11px; }
+.member-profile button { border: 1px solid var(--green); background: transparent; color: var(--green); border-radius: 10px; padding: 10px 12px; cursor: pointer; font-size: 11px; font-weight: 650; }
 .share-code { display: flex; align-items: center; gap: 12px; border: 1px solid #cbd5cd; background: white; border-radius: 12px; padding: 12px 13px; }
 .share-code > span { color: var(--muted); font-size: 10px; }
 .share-code strong { flex: 1; font: 17px var(--font-geist-mono), monospace; letter-spacing: .09em; }
