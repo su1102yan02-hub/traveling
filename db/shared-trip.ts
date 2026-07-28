@@ -29,6 +29,7 @@ async function initializeSchema(sql: SqlClient) {
     sql.query("CREATE TABLE IF NOT EXISTS trip_archives (id BIGINT PRIMARY KEY, title TEXT NOT NULL, destination TEXT NOT NULL, start_date TEXT NOT NULL, end_date TEXT NOT NULL, snapshot_json JSONB NOT NULL, archived_at TIMESTAMPTZ NOT NULL)"),
     sql.query("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ"),
     sql.query("ALTER TABLE trip_members ADD COLUMN IF NOT EXISTS device_id TEXT"),
+    sql.query("UPDATE expenses SET occurred_at = to_timestamp(id / 1000.0) WHERE occurred_at IS NULL AND id BETWEEN 946684800000 AND 4102444800000"),
     sql.query("CREATE INDEX IF NOT EXISTS expenses_trip_idx ON expenses (trip_id, id DESC)"),
     sql.query("CREATE INDEX IF NOT EXISTS plans_trip_day_idx ON plans (trip_id, day, time)"),
     sql.query("CREATE UNIQUE INDEX IF NOT EXISTS trip_members_trip_device_idx ON trip_members (trip_id, device_id) WHERE device_id IS NOT NULL"),

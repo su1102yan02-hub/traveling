@@ -49,5 +49,6 @@ test("shared persistence routes use Neon and Vercel Blob", async () => {
   assert.match(sharedTrip, /trip_archives/);
   assert.match(sharedTrip, /day_photos/);
   assert.match(sharedTrip, /trip_members_trip_device_idx/);
+  assert.match(sharedTrip, /to_timestamp\(id \/ 1000\.0\)/);
   assert.doesNotMatch(`${tripRoute}${photoRoute}${sharedTrip}`, /cloudflare:workers|env\.PHOTOS|D1 database/);
 });
