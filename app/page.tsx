@@ -368,16 +368,22 @@ export default function Home() {
     const element = dayScroll.current; if (!element) return;
     if (event.pointerType !== "mouse" || event.button !== 0) return;
     dragState.current = { active: true, moved: false, x: event.clientX, scrollLeft: element.scrollLeft };
-    element.setPointerCapture(event.pointerId);
   }
 
   function moveDayDrag(event: ReactPointerEvent<HTMLDivElement>) {
     if (!dragState.current.active || !dayScroll.current) return;
-    if (Math.abs(event.clientX - dragState.current.x) > 4) { dragState.current.moved = true; event.preventDefault(); }
+    if (Math.abs(event.clientX - dragState.current.x) > 4) {
+      if (!dragState.current.moved) dayScroll.current.setPointerCapture(event.pointerId);
+      dragState.current.moved = true;
+      event.preventDefault();
+    }
     dayScroll.current.scrollLeft = dragState.current.scrollLeft - (event.clientX - dragState.current.x);
   }
 
-  function endDayDrag() { dragState.current.active = false; }
+  function endDayDrag() {
+    dragState.current.active = false;
+    window.setTimeout(() => { dragState.current.moved = false; }, 0);
+  }
 
   function selectCalendarDay(day: number) {
     if (dragState.current.moved) { dragState.current.moved = false; return; }

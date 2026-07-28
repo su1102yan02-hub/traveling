@@ -22,6 +22,7 @@ test("product metadata and main experience are configured", async () => {
   assert.match(page, /delete_expense/);
   assert.match(page, /record-day-indicator/);
   assert.match(page, /initializedDateRange/);
+  assert.match(page, /if \(!dragState\.current\.moved\) dayScroll\.current\.setPointerCapture/);
   assert.match(page, /同步当前记录/);
   assert.match(page, /编辑信息/);
   assert.match(page, /删除旅程/);
