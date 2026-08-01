@@ -26,6 +26,7 @@ test("product metadata and main experience are configured", async () => {
   assert.match(page, /同步当前记录/);
   assert.match(page, /编辑信息/);
   assert.match(page, /删除旅程/);
+  assert.match(page, /RouteMap/);
   assert.match(page, /occurredAt/);
   assert.match(page, /traveling-member/);
   assert.match(page, /upsert_member/);
@@ -33,15 +34,18 @@ test("product metadata and main experience are configured", async () => {
 });
 
 test("shared persistence routes use Neon and Vercel Blob", async () => {
-  const [tripRoute, photoRoute, sharedTrip, environment] = await Promise.all([
+  const [tripRoute, photoRoute, mapRoute, sharedTrip, environment] = await Promise.all([
     readFile(new URL("app/api/trip/route.ts", root), "utf8"),
     readFile(new URL("app/api/photos/route.ts", root), "utf8"),
+    readFile(new URL("app/api/map/route/route.ts", root), "utf8"),
     readFile(new URL("db/shared-trip.ts", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
 
   assert.match(environment, /DATABASE_URL/);
   assert.match(environment, /BLOB_READ_WRITE_TOKEN/);
+  assert.match(environment, /NEXT_PUBLIC_AMAP_JS_KEY/);
+  assert.match(environment, /AMAP_WEB_SERVICE_KEY/);
   assert.match(tripRoute, /add_expense/);
   assert.match(tripRoute, /replace_all_plan/);
   assert.match(tripRoute, /archive_trip/);
@@ -53,6 +57,8 @@ test("shared persistence routes use Neon and Vercel Blob", async () => {
   assert.match(photoRoute, /@vercel\/blob/);
   assert.match(photoRoute, /put\(/);
   assert.match(photoRoute, /del\(/);
+  assert.match(mapRoute, /restapi\.amap\.com\/v3\/geocode\/geo/);
+  assert.match(mapRoute, /direction\/\$\{mode\}/);
   assert.match(sharedTrip, /@neondatabase\/serverless/);
   assert.match(sharedTrip, /trip_archives/);
   assert.match(sharedTrip, /day_photos/);

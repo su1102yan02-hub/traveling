@@ -6,6 +6,7 @@ import {
   Train, Trash, UploadSimple, UsersThree, Wallet, X,
 } from "@phosphor-icons/react";
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import RouteMap from "./components/RouteMap";
 
 type Category = "交通" | "住宿" | "餐饮" | "门票" | "其他";
 type View = "journey" | "ledger" | "history";
@@ -327,7 +328,7 @@ export default function Home() {
   const total = useMemo(() => expenses.reduce((sum, item) => sum + Number(item.amount), 0), [expenses]);
   const grouped = useMemo(() => (Object.keys(categoryMeta) as Category[]).map((name) => ({ name, value: expenses.filter((item) => item.category === name).reduce((sum, item) => sum + Number(item.amount), 0) })), [expenses]);
   const maxCategory = Math.max(...grouped.map((item) => item.value), 1);
-  const dayPlan = plan.filter((item) => item.day === selectedDay);
+  const dayPlan = useMemo(() => plan.filter((item) => item.day === selectedDay), [plan, selectedDay]);
   const daySpent = expenses.filter((item) => item.day === selectedDay).reduce((sum, item) => sum + Number(item.amount), 0);
   const calendarDays = useMemo<CalendarDay[]>(() => {
     if (trip.startDate && trip.endDate) {
@@ -611,6 +612,8 @@ export default function Home() {
                 <div className="day-summary"><span>第 {selectedDay} 天已记</span><strong>{expenses.filter((item) => item.day === selectedDay).length} 笔</strong><small>拖动浏览全部日期</small></div>
               </div>
             </section>
+
+            <RouteMap day={selectedDay} destination={trip.destination} plan={dayPlan} />
 
             <section className="focus-grid">
               <div className="itinerary-section">
