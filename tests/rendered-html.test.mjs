@@ -20,6 +20,9 @@ test("product metadata and main experience are configured", async () => {
   assert.match(page, /保存 PNG 图片/);
   assert.match(page, /update_expense/);
   assert.match(page, /delete_expense/);
+  assert.match(page, /update_plan/);
+  assert.match(page, /delete_plan/);
+  assert.match(page, /PlanEditModal/);
   assert.match(page, /record-day-indicator/);
   assert.match(page, /initializedDateRange/);
   assert.match(page, /if \(!dragState\.current\.moved\) dayScroll\.current\.setPointerCapture/);
@@ -48,6 +51,8 @@ test("shared persistence routes use Neon and Vercel Blob", async () => {
   assert.match(environment, /AMAP_WEB_SERVICE_KEY/);
   assert.match(tripRoute, /add_expense/);
   assert.match(tripRoute, /replace_all_plan/);
+  assert.match(tripRoute, /update_plan/);
+  assert.match(tripRoute, /delete_plan/);
   assert.match(tripRoute, /archive_trip/);
   assert.match(tripRoute, /update_archive/);
   assert.match(tripRoute, /refresh_archive/);

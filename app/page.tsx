@@ -226,6 +226,7 @@ export default function Home() {
   const [showDates, setShowDates] = useState(false);
   const [activeHistory, setActiveHistory] = useState<TripHistory | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editingPlan, setEditingPlan] = useState<PlanItem | null>(null);
   const [photoToDelete, setPhotoToDelete] = useState<DayPhoto | null>(null);
   const [importText, setImportText] = useState("");
   const [toast, setToast] = useState("");
@@ -458,6 +459,21 @@ export default function Home() {
     postTrip({ action: "toggle_plan", id: item.id, done });
   }
 
+  function updatePlan(item: PlanItem) {
+    setPlan((current) => current.map((entry) => entry.id === item.id ? item : entry));
+    setSelectedDay(item.day);
+    setEditingPlan(null);
+    flash("行程已修改并同步");
+    postTrip({ action: "update_plan", item });
+  }
+
+  function deletePlan(item: PlanItem) {
+    setPlan((current) => current.filter((entry) => entry.id !== item.id));
+    setEditingPlan(null);
+    flash("这条行程已删除");
+    postTrip({ action: "delete_plan", id: item.id });
+  }
+
   function importSchedule() {
     const parsed = parseScheduleText(importText, selectedDay);
     const imported: PlanItem[] = parsed.map((item: Omit<PlanItem, "id">, index: number) => ({ ...item, id: Date.now() + index }));
@@ -599,7 +615,7 @@ export default function Home() {
             <section className="focus-grid">
               <div className="itinerary-section">
                 <div className="section-title"><div><CalendarBlank /><h2>当天行程</h2></div><button onClick={() => setShowImport(true)}>编辑日程</button></div>
-                {dayPlan.length ? <div className="timeline">{dayPlan.map((item) => <div className={`timeline-item ${item.done ? "done" : ""}`} key={item.id}><button aria-label={item.done ? "标记为未完成" : "标记为完成"} onClick={() => togglePlan(item)}>{item.done ? <Check weight="bold" /> : null}</button><time>{item.time}</time><div><strong>{item.title}</strong><span><MapPin />{item.place}</span></div></div>)}</div> : <EmptyPlan onImport={() => setShowImport(true)} />}
+                {dayPlan.length ? <div className="timeline">{dayPlan.map((item) => <div className={`timeline-item ${item.done ? "done" : ""}`} key={item.id}><button className="plan-check" aria-label={item.done ? "标记为未完成" : "标记为完成"} onClick={() => togglePlan(item)}>{item.done ? <Check weight="bold" /> : null}</button><time>{item.time}</time><div className="plan-copy"><strong>{item.title}</strong><span><MapPin />{item.place}</span></div><button className="plan-edit-button" aria-label={`修改行程：${item.title}`} onClick={() => setEditingPlan(item)}><PencilSimple /></button></div>)}</div> : <EmptyPlan onImport={() => setShowImport(true)} />}
               </div>
 
               <div className="add-expense">
@@ -631,6 +647,7 @@ export default function Home() {
       {showDates && <DateRangeModal trip={trip} onClose={() => setShowDates(false)} onSave={saveTripDates} />}
       {activeHistory && <HistoryModal history={activeHistory} onClose={() => setActiveHistory(null)} onUpdate={updateHistory} onRefresh={refreshHistory} onDelete={deleteHistory} />}
       {editingExpense && <ExpenseEditModal expense={editingExpense} maxDay={calendarDays.length} onClose={() => setEditingExpense(null)} onSave={updateExpense} onDelete={deleteExpense} />}
+      {editingPlan && <PlanEditModal item={editingPlan} maxDay={calendarDays.length} onClose={() => setEditingPlan(null)} onSave={updatePlan} onDelete={deletePlan} />}
       {photoToDelete && <PhotoDeleteModal photo={photoToDelete} onClose={() => setPhotoToDelete(null)} onDelete={() => deletePhoto(photoToDelete)} />}
       {posterPreview && <PosterPreviewModal preview={posterPreview} onClose={closePosterPreview} />}
       {toast && <div className="toast"><Check weight="bold" />{toast}</div>}
@@ -678,6 +695,19 @@ function HistoryModal({ history, onClose, onUpdate, onRefresh, onDelete }: { his
     setEditing(false);
   }
   return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button>{editing ? <div className="history-edit-fields"><label><span>旅程名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>目的地</span><input value={destination} onChange={(event) => setDestination(event.target.value)} /></label><div><label><span>出发日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>返程日期</span><input type="date" min={startDate} value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div><div className="history-edit-actions"><button className="file-button" onClick={() => setEditing(false)}>取消</button><button className="confirm-import" onClick={saveInfo}>保存修改</button></div></div> : <><span className="history-kicker">{history.startDate} — {history.endDate}</span><h2 id="history-title">{history.title}</h2><p><MapPin weight="fill" />{history.destination}</p></>}<div className="history-snapshot-note">这是一份独立快照，不会被当前账单自动覆盖。旅行中可随时点击“同步当前记录”更新它。</div><div className="history-modal-actions"><button onClick={() => onRefresh(history)}><Clock />同步当前记录</button><button onClick={() => setEditing(true)}><PencilSimple />编辑信息</button><button className={`history-delete ${confirmDelete ? "confirming" : ""}`} onClick={() => confirmDelete ? onDelete(history) : setConfirmDelete(true)}><Trash />{confirmDelete ? "确认删除" : "删除旅程"}</button></div><div className="history-overview"><div><span>日程</span><strong>{history.snapshot.plan.length}</strong></div><div><span>照片</span><strong>{history.snapshot.photos.length}</strong></div><div><span>总开销</span><strong>¥{money(total)}</strong></div></div><div className="archive-days">{groupedPlan.length ? groupedPlan.map((day) => <section key={day}><span>DAY {String(day).padStart(2, "0")}</span>{history.snapshot.plan.filter((item) => item.day === day).map((item) => <div key={item.id}><time>{item.time}</time><strong>{item.title}</strong><small>{item.place}</small></div>)}</section>) : <div className="archive-empty">这趟旅程没有保存日程项目</div>}</div><div className="archive-expenses"><span>保存的账单 · {history.snapshot.expenses.length} 笔</span>{history.snapshot.expenses.length ? history.snapshot.expenses.map((item) => <div key={item.id}><span>第 {item.day} 天 · {item.category}</span><strong>{item.title}</strong><b>¥{money(item.amount)}</b></div>) : <div className="archive-empty">这份快照还没有账单记录</div>}</div></section></div>;
+}
+
+function PlanEditModal({ item, maxDay, onClose, onSave, onDelete }: { item: PlanItem; maxDay: number; onClose: () => void; onSave: (item: PlanItem) => void; onDelete: (item: PlanItem) => void }) {
+  const [time, setTime] = useState(item.time);
+  const [title, setTitle] = useState(item.title);
+  const [place, setPlace] = useState(item.place);
+  const [day, setDay] = useState(item.day);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  function save() {
+    if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(time) || !title.trim()) return;
+    onSave({ ...item, time, title: title.trim(), place: place.trim() || title.trim(), day });
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal expense-modal plan-edit-modal" role="dialog" aria-modal="true" aria-labelledby="plan-edit-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><PencilSimple /></span><h2 id="plan-edit-title">修改这条行程</h2><p>时间、地点或归属日期修改后，会立即同步给同行伙伴。</p><div className="trip-fields"><label><span>行程名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：参观博物馆" /></label><label><span>地图地点</span><input value={place} onChange={(event) => setPlace(event.target.value)} placeholder="用于地图定位，例如：莫高窟" /></label><div><label><span>时间</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label><i>·</i><label><span>归入哪一天</span><input type="number" min={1} max={Math.max(maxDay, item.day)} value={day} onChange={(event) => setDay(Math.min(Math.max(1, Number(event.target.value)), Math.max(maxDay, item.day)))} /></label></div></div><div className="expense-modal-actions"><button className={`delete-expense ${confirmDelete ? "confirming" : ""}`} onClick={() => confirmDelete ? onDelete(item) : setConfirmDelete(true)}><Trash />{confirmDelete ? "确认删除" : "删除行程"}</button><button className="confirm-import" onClick={save}>保存修改<ArrowRight /></button></div>{confirmDelete && <small className="delete-warning">删除后无法恢复，再点一次确认删除。</small>}</section></div>;
 }
 
 function ExpenseEditModal({ expense, maxDay, onClose, onSave, onDelete }: { expense: Expense; maxDay: number; onClose: () => void; onSave: (expense: Expense) => void; onDelete: (expense: Expense) => void }) {

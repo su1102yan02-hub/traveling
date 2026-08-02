@@ -33,6 +33,11 @@ export async function POST(request: Request) {
       await sql.query("DELETE FROM expenses WHERE id = $1 AND trip_id = $2", [payload.id, TRIP_ID]);
     } else if (payload.action === "toggle_plan") {
       await sql.query("UPDATE plans SET done = $1 WHERE id = $2 AND trip_id = $3", [Boolean(payload.done), payload.id, TRIP_ID]);
+    } else if (payload.action === "update_plan") {
+      const item = payload.item as Payload;
+      await sql.query("UPDATE plans SET time = $1, title = $2, place = $3, day = $4, done = $5 WHERE id = $6 AND trip_id = $7", [item.time, item.title, item.place, item.day, Boolean(item.done), item.id, TRIP_ID]);
+    } else if (payload.action === "delete_plan") {
+      await sql.query("DELETE FROM plans WHERE id = $1 AND trip_id = $2", [payload.id, TRIP_ID]);
     } else if (payload.action === "replace_plan") {
       const day = Number(payload.day);
       const items = payload.items as Payload[];

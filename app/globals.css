@@ -207,17 +207,20 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .section-title button, .section-title > span { border: 0; background: transparent; color: var(--green); font-size: 11px; cursor: pointer; padding: 5px; }
 .timeline { position: relative; }
 .timeline::before { content: ""; position: absolute; left: 13px; top: 15px; bottom: 20px; width: 1px; background: #cbd4cc; }
-.timeline-item { display: grid; grid-template-columns: 27px 50px 1fr; gap: 10px; align-items: start; padding: 10px 0; position: relative; }
-.timeline-item > button { width: 27px; height: 27px; border: 1px solid #b8c5bc; border-radius: 50%; background: var(--paper); display: grid; place-items: center; cursor: pointer; z-index: 1; }
-.timeline-item.done > button { background: var(--green); color: white; border-color: var(--green); }
-.timeline-item > button svg { width: 13px; }
+.timeline-item { display: grid; grid-template-columns: 27px 50px minmax(0, 1fr) 28px; gap: 10px; align-items: start; padding: 10px 0; position: relative; }
+.timeline-item .plan-check { width: 27px; height: 27px; border: 1px solid #b8c5bc; border-radius: 50%; background: var(--paper); display: grid; place-items: center; cursor: pointer; z-index: 1; }
+.timeline-item.done .plan-check { background: var(--green); color: white; border-color: var(--green); }
+.timeline-item .plan-check svg { width: 13px; }
 .timeline-item time { font: 11px var(--font-geist-mono), monospace; color: var(--muted); padding-top: 7px; }
-.timeline-item > div { padding-top: 3px; }
+.timeline-item .plan-copy { padding-top: 3px; min-width: 0; }
 .timeline-item strong, .timeline-item span { display: block; }
 .timeline-item strong { font-size: 13px; }
 .timeline-item span { margin-top: 4px; color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 3px; }
 .timeline-item span svg { width: 11px; }
 .timeline-item.done strong { color: #809089; text-decoration: line-through; }
+.plan-edit-button { width: 28px; height: 28px; border: 1px solid #ccd6ce; border-radius: 8px; background: transparent; color: var(--green-dark); display: grid; place-items: center; cursor: pointer; opacity: .7; }
+.plan-edit-button:hover { background: #e8efe9; opacity: 1; }
+.plan-edit-button svg { width: 14px; height: 14px; }
 .expense-list { display: grid; }
 .expense-row { display: grid; grid-template-columns: 36px 1fr auto 30px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #e0e5df; }
 .expense-row:last-child { border-bottom: 0; }
