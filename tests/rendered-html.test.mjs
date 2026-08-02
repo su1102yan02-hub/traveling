@@ -64,6 +64,10 @@ test("shared persistence routes use Neon and Vercel Blob", async () => {
   assert.match(photoRoute, /del\(/);
   assert.match(mapRoute, /restapi\.amap\.com\/v3\/geocode\/geo/);
   assert.match(mapRoute, /direction\/\$\{mode\}/);
+  const routeMap = await readFile(new URL("app/components/RouteMap.tsx", root), "utf8");
+  assert.match(routeMap, /当天路线演示/);
+  assert.match(routeMap, /simulatedPoints/);
+  assert.doesNotMatch(routeMap, /fetch\(|AMAP_WEB_SERVICE_KEY|NEXT_PUBLIC_AMAP/);
   assert.match(sharedTrip, /@neondatabase\/serverless/);
   assert.match(sharedTrip, /trip_archives/);
   assert.match(sharedTrip, /day_photos/);
