@@ -415,6 +415,14 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .archive-expenses div strong { font-size: 11px; }
 .archive-expenses div b { font-size: 11px; }
 .modal-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.import-preview { margin-top: 10px; border: 1px solid #cbd5cd; border-radius: 11px; background: white; padding: 11px 12px; display: grid; gap: 9px; }
+.import-preview > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.import-preview strong { font-size: 11px; }
+.import-preview > div:first-child span { color: var(--muted); font-size: 9px; }
+.import-preview > div:last-child { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.import-preview > div:last-child span { flex: 0 0 auto; border-radius: 999px; background: #e6eee7; color: var(--green-dark); padding: 5px 8px; font-size: 9px; }
+.import-preview b { color: var(--green); }
+.import-preview.unrecognized { border-color: #e0b5a5; background: #fff8f4; color: #914a36; }
 .modal-actions button { border-radius: 10px; padding: 10px 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; font-weight: 650; }
 .file-button { border: 1px solid #bfcac1; background: transparent; }
 .confirm-import { border: 1px solid var(--green-dark); background: var(--green-dark); color: white; flex: 1; }

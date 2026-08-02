@@ -7,6 +7,7 @@ import {
 } from "@phosphor-icons/react";
 import { ChangeEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RouteMap from "./components/RouteMap";
+import { parseScheduleText, scheduleImportSummary } from "../lib/schedule-import.mjs";
 
 type Category = "交通" | "住宿" | "餐饮" | "门票" | "其他";
 type View = "journey" | "ledger" | "history";
@@ -458,29 +459,9 @@ export default function Home() {
   }
 
   function importSchedule() {
-    const lines = importText.split("\n").map((line) => line.trim()).filter(Boolean);
-    if (!lines.length) return flash("粘贴几行日程后再导入");
-    let currentDay = selectedDay;
-    let datedSectionDay = 0;
-    const itemCounts = new Map<number, number>();
-    const imported: PlanItem[] = [];
-    lines.forEach((line) => {
-      const dayHeading = line.match(/^(?:第\s*)?(\d{1,2})\s*天(?:\s*[：:｜|—-]?\s*.*)?$/i) || line.match(/^(?:day|d)\s*(\d{1,2})(?:\s*[：:｜|—-]?\s*.*)?$/i);
-      if (dayHeading) {
-        currentDay = Math.max(1, Number(dayHeading[1]));
-        return;
-      }
-      if (/^(?:\d{4}[./-])?\d{1,2}[月./-]\d{1,2}(?:日)?(?:\s+.*)?$/.test(line)) {
-        datedSectionDay += 1;
-        currentDay = datedSectionDay;
-        return;
-      }
-      const timeMatch = line.match(/^(\d{1,2}[:：]\d{2})\s*/);
-      const [title, place = "待确认地点"] = line.replace(/^(\d{1,2}[:：]\d{2})\s*/, "").split(/[｜|@]/).map((part) => part.trim());
-      const count = itemCounts.get(currentDay) || 0;
-      itemCounts.set(currentDay, count + 1);
-      imported.push({ id: Date.now() + imported.length, time: timeMatch?.[1].replace("：", ":") || `${String(Math.min(10 + count, 23)).padStart(2, "0")}:00`, title: title || "新日程", place, day: currentDay });
-    });
+    const parsed = parseScheduleText(importText, selectedDay);
+    const imported: PlanItem[] = parsed.map((item: Omit<PlanItem, "id">, index: number) => ({ ...item, id: Date.now() + index }));
+    if (!importText.trim()) return flash("粘贴几行日程后再导入");
     if (!imported.length) return flash("只识别到了日期，还需要添加具体行程");
     const importedDays = new Set(imported.map((item) => item.day));
     setPlan(imported);
@@ -645,7 +626,7 @@ export default function Home() {
         {view === "history" && <HistoryView histories={histories} canArchive={Boolean(plan.length || expenses.length || photos.length)} onArchive={archiveTrip} onOpen={setActiveHistory} />}
       </section>
 
-      {showImport && <ImportModal importText={importText} setImportText={setImportText} onClose={() => setShowImport(false)} onImport={importSchedule} onFile={readFile} fileInput={fileInput} />}
+      {showImport && <ImportModal importText={importText} setImportText={setImportText} selectedDay={selectedDay} onClose={() => setShowImport(false)} onImport={importSchedule} onFile={readFile} fileInput={fileInput} />}
       {showShare && <ShareModal members={members} identity={identity} code={shareCode} state={syncState} onClose={() => setShowShare(false)} onCopy={copyInvite} onRename={updateMemberName} />}
       {showDates && <DateRangeModal trip={trip} onClose={() => setShowDates(false)} onSave={saveTripDates} />}
       {activeHistory && <HistoryModal history={activeHistory} onClose={() => setActiveHistory(null)} onUpdate={updateHistory} onRefresh={refreshHistory} onDelete={deleteHistory} />}
@@ -721,8 +702,10 @@ function PosterPreviewModal({ preview, onClose }: { preview: { url: string; file
   return <div className="modal-backdrop poster-backdrop" role="presentation" onMouseDown={onClose}><section className="poster-preview-modal" role="dialog" aria-modal="true" aria-labelledby="poster-preview-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><div className="poster-preview-heading"><span>CHECK-IN POSTER</span><h2 id="poster-preview-title">你的旅行打卡长图</h2><p>已按日期自动配好当天日程与随拍。</p></div><div className="poster-preview-scroll"><img src={preview.url} alt="旅行打卡长图预览" /></div><div className="poster-preview-actions"><button className="file-button" onClick={onClose}>返回调整</button><a href={preview.url} download={preview.filename}><DownloadSimple />保存 PNG 图片</a></div></section></div>;
 }
 
-function ImportModal({ importText, setImportText, onClose, onImport, onFile, fileInput }: { importText: string; setImportText: (value: string) => void; onClose: () => void; onImport: () => void; onFile: (event: ChangeEvent<HTMLInputElement>) => void; fileInput: React.RefObject<HTMLInputElement | null> }) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><UploadSimple /></span><h2 id="import-title">一次导入整趟行程</h2><p>用“第1天 / Day 1”分隔每天，再逐行填写时间、行程和地点。也支持 TXT、CSV、ICS 文件。</p><textarea value={importText} onChange={(event) => setImportText(event.target.value)} aria-label="待导入的多日行程" placeholder={"第1天\n09:30 古城散步｜塔佩门\n12:00 午餐｜古城北门\n\n第2天\n08:00 山间徒步｜素贴山\n18:30 看日落｜山顶观景台"} /><input ref={fileInput} type="file" accept=".txt,.csv,.ics,text/plain,text/calendar" onChange={onFile} hidden /><div className="modal-actions"><button className="file-button" onClick={() => fileInput.current?.click()}><UploadSimple />选择文件</button><button className="confirm-import" onClick={onImport}>导入整趟行程<ArrowRight /></button></div></section></div>;
+function ImportModal({ importText, setImportText, selectedDay, onClose, onImport, onFile, fileInput }: { importText: string; setImportText: (value: string) => void; selectedDay: number; onClose: () => void; onImport: () => void; onFile: (event: ChangeEvent<HTMLInputElement>) => void; fileInput: React.RefObject<HTMLInputElement | null> }) {
+  const preview = useMemo(() => scheduleImportSummary(parseScheduleText(importText, selectedDay)), [importText, selectedDay]);
+  const itemCount = preview.reduce((sum, item) => sum + item.count, 0);
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><UploadSimple /></span><h2 id="import-title">一次导入整趟行程</h2><p>支持“第2天、第二天、Day 2、8月3日”等分组，也支持 Markdown、TXT、CSV 和 ICS 文件。</p><textarea value={importText} onChange={(event) => setImportText(event.target.value)} aria-label="待导入的多日行程" placeholder={"第一天｜8月2日\n09:30 故宫参观｜故宫博物院\n14:00 景山看全景｜景山公园\n\n第二天｜8月3日\n10:00 逛胡同｜南锣鼓巷\n18:30 看夜景｜什刹海"} />{importText.trim() && <div className={`import-preview ${preview.length ? "recognized" : "unrecognized"}`}><div><strong>{preview.length ? `已识别 ${preview.length} 天 · ${itemCount} 项` : "还没有识别到具体行程"}</strong><span>{preview.length ? "导入前先确认每天数量" : "请检查日期标题和每行内容"}</span></div>{preview.length > 0 && <div>{preview.map((item) => <span key={item.day}>第 {item.day} 天 <b>{item.count}</b> 项</span>)}</div>}</div>}<input ref={fileInput} type="file" accept=".txt,.csv,.ics,text/plain,text/calendar" onChange={onFile} hidden /><div className="modal-actions"><button className="file-button" onClick={() => fileInput.current?.click()}><UploadSimple />选择文件</button><button className="confirm-import" onClick={onImport}>导入整趟行程<ArrowRight /></button></div></section></div>;
 }
 
 function ShareModal({ members, identity, code, state, onClose, onCopy, onRename }: { members: Member[]; identity: Member | null; code: string; state: string; onClose: () => void; onCopy: () => void; onRename: (name: string) => void }) {
