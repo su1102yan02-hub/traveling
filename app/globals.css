@@ -180,8 +180,11 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .route-map-error { flex-direction: column; text-align: center; color: var(--ink); }
 .route-map-error > svg { width: 28px; height: 28px; color: var(--green); }
 .route-map-error span { color: var(--muted); font-size: 10px; }
+.route-map-error button, .route-unresolved button { border: 1px solid var(--green); border-radius: 999px; background: white; color: var(--green-dark); padding: 6px 11px; cursor: pointer; font-size: 9px; font-weight: 700; }
 .route-map > footer { padding: 13px 18px 15px; border-top: 1px solid var(--line); }
 .route-map > footer > small { display: block; margin-top: 9px; color: #9a644d; font-size: 9px; }
+.route-unresolved { margin-top: 9px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #9a644d; }
+.route-unresolved small { font-size: 9px; }
 .route-stops { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: thin; }
 .route-stops > span { flex: 0 0 auto; border: 1px solid #d0d8d1; border-radius: 999px; background: white; padding: 7px 11px 7px 7px; display: flex; align-items: center; gap: 6px; color: #52695b; font-size: 9px; }
 .route-stops i { width: 19px; height: 19px; border-radius: 50%; background: var(--green-dark); color: white; display: grid; place-items: center; font-style: normal; font-size: 8px; }
@@ -395,6 +398,7 @@ h1 { font-size: clamp(29px, 3.2vw, 48px); line-height: 1.06; letter-spacing: -.0
 .history-edit-fields > label, .history-edit-fields > div > label { display: grid; gap: 5px; }
 .history-edit-fields label span { color: var(--muted); font-size: 9px; }
 .history-edit-fields input { width: 100%; border: 1px solid #c5d0c7; border-radius: 9px; background: white; padding: 9px 10px; color: var(--ink); }
+.field-help { color: var(--muted); font-size: 8px; line-height: 1.5; }
 .history-edit-fields > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .history-edit-fields .history-edit-actions { grid-template-columns: 1fr 2fr; margin-top: 2px; }
 .history-edit-actions button { min-height: 38px; border-radius: 9px; cursor: pointer; }

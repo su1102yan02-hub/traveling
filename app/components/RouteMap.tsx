@@ -45,7 +45,7 @@ function loadAmap(key: string, securityCode: string) {
   return amapPromise;
 }
 
-export default function RouteMap({ day, destination, plan }: { day: number; destination: string; plan: PlanLocation[] }) {
+export default function RouteMap({ day, destination, plan, revision = 0 }: { day: number; destination: string; plan: PlanLocation[]; revision?: number }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const map = useRef<MapInstance | null>(null);
   const movingMarker = useRef<MarkerInstance | null>(null);
@@ -54,10 +54,11 @@ export default function RouteMap({ day, destination, plan }: { day: number; dest
   const [error, setError] = useState("");
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const jsKey = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
   const securityCode = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE || "";
   const routeItems = useMemo(() => plan.filter((item) => item.place && item.place !== "待确认地点"), [plan]);
-  const routeKey = useMemo(() => `${destination}|${routeItems.map((item) => item.place).join("|")}`, [destination, routeItems]);
+  const routeKey = useMemo(() => `${revision}|${destination}|${routeItems.map((item) => item.place).join("|")}`, [destination, revision, routeItems]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -65,6 +66,7 @@ export default function RouteMap({ day, destination, plan }: { day: number; dest
     Promise.resolve().then(() => {
       if (controller.signal.aborted) return;
       setPlaying(false); setPaused(false); setError("");
+      setRoute(null); map.current?.clearMap();
       if (!routeItems.length || !jsKey || !securityCode) { setRoute(null); setLoading(false); return; }
       const cached = locationCache.get(routeKey);
       if (cached) { setRoute(cached); setLoading(false); return; }
@@ -75,12 +77,12 @@ export default function RouteMap({ day, destination, plan }: { day: number; dest
           if (!response.ok) throw new Error(data.error || "地点定位失败");
           return data as RouteData;
         })
-        .then((data) => { locationCache.set(routeKey, data); setRoute(data); })
+        .then((data) => { if (!data.unresolved.length) locationCache.set(routeKey, data); setRoute(data); })
         .catch((reason) => { if (reason?.name !== "AbortError") setError(reason instanceof Error ? reason.message : "地点定位失败"); })
         .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     });
     return () => controller.abort();
-  }, [day, destination, jsKey, routeItems, routeKey, securityCode]);
+  }, [day, destination, jsKey, retryCount, routeItems, routeKey, securityCode]);
 
   useEffect(() => {
     if (!route || !route.stops.length || !mapElement.current || !jsKey || !securityCode) return;
@@ -114,7 +116,7 @@ export default function RouteMap({ day, destination, plan }: { day: number; dest
 
   return <section className="route-map" aria-label={`第 ${day} 天地点地图`}>
     <header><div><span>DAY {String(day).padStart(2, "0")} · MAP</span><h2>当天地点地图</h2><p>{route?.stops.length || routeItems.length} 个地点 · 真实地图定位，按顺序直线连接</p></div><div className="route-map-controls">{playing ? <button className="route-play" onClick={pause}><Pause weight="fill" />暂停</button> : <button className="route-play" disabled={(route?.path.length || 0) < 2 || loading} onClick={play}><Play weight="fill" />{paused ? "继续" : "播放行程"}</button>}</div></header>
-    <div className="route-map-canvas" ref={mapElement}>{loading && <div className="route-map-loading"><SpinnerGap />正在定位当天地点</div>}{error && <div className="route-map-error"><MapTrifold /><strong>{error}</strong><span>可在行程编辑中把“地图地点”改得更具体。</span></div>}</div>
-    {route && <footer><div className="route-stops">{route.stops.map((stop, index) => <span key={stop.id}><i>{index + 1}</i><b>{stop.time}</b>{stop.place}</span>)}</div><small>虚线只表达游览顺序，不代表实际道路、距离或驾车时间。</small>{route.unresolved.length > 0 && <small>未定位：{route.unresolved.join("、")}，可补充城市或区县后重试。</small>}</footer>}
+    <div className="route-map-canvas" ref={mapElement}>{loading && <div className="route-map-loading"><SpinnerGap />正在定位当天地点</div>}{error && <div className="route-map-error"><MapTrifold /><strong>{error}</strong><span>可在行程编辑中把“地图地点”改得更具体。</span><button onClick={() => setRetryCount((current) => current + 1)}>重新定位</button></div>}</div>
+    {route && <footer><div className="route-stops">{route.stops.map((stop, index) => <span key={stop.id}><i>{index + 1}</i><b>{stop.time}</b>{stop.place}</span>)}</div><small>虚线只表达游览顺序，不代表实际道路、距离或驾车时间。</small>{route.unresolved.length > 0 && <div className="route-unresolved"><small>未定位：{route.unresolved.join("、")}。请修改对应行程的“地图地点”。</small><button onClick={() => setRetryCount((current) => current + 1)}>重新定位</button></div>}</footer>}
   </section>;
 }

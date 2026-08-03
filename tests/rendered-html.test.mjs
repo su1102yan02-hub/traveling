@@ -23,6 +23,8 @@ test("product metadata and main experience are configured", async () => {
   assert.match(page, /update_plan/);
   assert.match(page, /delete_plan/);
   assert.match(page, /PlanEditModal/);
+  assert.match(page, /mapRevision/);
+  assert.match(page, /地图只读取这里；保存后会立即重新定位/);
   assert.match(page, /record-day-indicator/);
   assert.match(page, /initializedDateRange/);
   assert.match(page, /if \(!dragState\.current\.moved\) dayScroll\.current\.setPointerCapture/);
@@ -68,6 +70,8 @@ test("shared persistence routes use Neon and Vercel Blob", async () => {
   assert.match(routeMap, /当天地点地图/);
   assert.match(routeMap, /webapi\.amap\.com/);
   assert.match(routeMap, /正在定位当天地点/);
+  assert.match(routeMap, /if \(!data\.unresolved\.length\) locationCache/);
+  assert.match(routeMap, /重新定位/);
   assert.doesNotMatch(routeMap, /route-mode|setMode|mode ===/);
   assert.match(sharedTrip, /@neondatabase\/serverless/);
   assert.match(sharedTrip, /trip_archives/);

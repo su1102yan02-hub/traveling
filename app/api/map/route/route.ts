@@ -12,7 +12,7 @@ async function geocode(key: string, destination: string, place: string) {
   const hasDestination = Boolean(destination && destination !== "待定目的地");
   const params = new URLSearchParams({ key, address: hasDestination ? `${destination} ${place}` : place, output: "json" });
   if (hasDestination) params.set("city", destination);
-  const response = await fetch(`https://restapi.amap.com/v3/geocode/geo?${params}`, { next: { revalidate: 604800 } });
+  const response = await fetch(`https://restapi.amap.com/v3/geocode/geo?${params}`, { cache: "no-store" });
   if (!response.ok) return null;
   const data = await response.json() as { status?: string; geocodes?: Array<{ location?: string; formatted_address?: string }> };
   const location = data.status === "1" && data.geocodes?.[0]?.location ? parseLocation(data.geocodes[0].location) : null;

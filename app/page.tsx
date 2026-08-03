@@ -227,6 +227,7 @@ export default function Home() {
   const [activeHistory, setActiveHistory] = useState<TripHistory | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editingPlan, setEditingPlan] = useState<PlanItem | null>(null);
+  const [mapRevision, setMapRevision] = useState(0);
   const [photoToDelete, setPhotoToDelete] = useState<DayPhoto | null>(null);
   const [importText, setImportText] = useState("");
   const [toast, setToast] = useState("");
@@ -461,6 +462,7 @@ export default function Home() {
 
   function updatePlan(item: PlanItem) {
     setPlan((current) => current.map((entry) => entry.id === item.id ? item : entry));
+    setMapRevision((current) => current + 1);
     setSelectedDay(item.day);
     setEditingPlan(null);
     flash("行程已修改并同步");
@@ -469,6 +471,7 @@ export default function Home() {
 
   function deletePlan(item: PlanItem) {
     setPlan((current) => current.filter((entry) => entry.id !== item.id));
+    setMapRevision((current) => current + 1);
     setEditingPlan(null);
     flash("这条行程已删除");
     postTrip({ action: "delete_plan", id: item.id });
@@ -481,6 +484,7 @@ export default function Home() {
     if (!imported.length) return flash("只识别到了日期，还需要添加具体行程");
     const importedDays = new Set(imported.map((item) => item.day));
     setPlan(imported);
+    setMapRevision((current) => current + 1);
     setSelectedDay(Math.min(...importedDays));
     setShowImport(false); setImportText(""); flash(`已导入 ${imported.length} 项 · ${importedDays.size} 天`);
     postTrip({ action: "replace_all_plan", items: imported });
@@ -610,7 +614,7 @@ export default function Home() {
               </div>
             </section>
 
-            <RouteMap day={selectedDay} destination={trip.destination} plan={dayPlan} />
+            <RouteMap day={selectedDay} destination={trip.destination} plan={dayPlan} revision={mapRevision} />
 
             <section className="focus-grid">
               <div className="itinerary-section">
@@ -707,7 +711,7 @@ function PlanEditModal({ item, maxDay, onClose, onSave, onDelete }: { item: Plan
     if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(time) || !title.trim()) return;
     onSave({ ...item, time, title: title.trim(), place: place.trim() || title.trim(), day });
   }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal expense-modal plan-edit-modal" role="dialog" aria-modal="true" aria-labelledby="plan-edit-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><PencilSimple /></span><h2 id="plan-edit-title">修改这条行程</h2><p>时间、地点或归属日期修改后，会立即同步给同行伙伴。</p><div className="trip-fields"><label><span>行程名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：参观博物馆" /></label><label><span>地图地点</span><input value={place} onChange={(event) => setPlace(event.target.value)} placeholder="用于地图定位，例如：莫高窟" /></label><div><label><span>时间</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label><i>·</i><label><span>归入哪一天</span><input type="number" min={1} max={Math.max(maxDay, item.day)} value={day} onChange={(event) => setDay(Math.min(Math.max(1, Number(event.target.value)), Math.max(maxDay, item.day)))} /></label></div></div><div className="expense-modal-actions"><button className={`delete-expense ${confirmDelete ? "confirming" : ""}`} onClick={() => confirmDelete ? onDelete(item) : setConfirmDelete(true)}><Trash />{confirmDelete ? "确认删除" : "删除行程"}</button><button className="confirm-import" onClick={save}>保存修改<ArrowRight /></button></div>{confirmDelete && <small className="delete-warning">删除后无法恢复，再点一次确认删除。</small>}</section></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="import-modal expense-modal plan-edit-modal" role="dialog" aria-modal="true" aria-labelledby="plan-edit-title" onMouseDown={(event) => event.stopPropagation()}><button className="close-modal" aria-label="关闭" onClick={onClose}><X /></button><span className="modal-icon"><PencilSimple /></span><h2 id="plan-edit-title">修改这条行程</h2><p>时间、地点或归属日期修改后，会立即同步给同行伙伴。</p><div className="trip-fields"><label><span>行程名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：参观博物馆" /></label><label><span>地图地点</span><input value={place} onChange={(event) => setPlace(event.target.value)} placeholder="例如：甘肃省兰州市中山桥" /><small className="field-help">地图只读取这里；保存后会立即重新定位。</small></label><div><label><span>时间</span><input type="time" value={time} onChange={(event) => setTime(event.target.value)} /></label><i>·</i><label><span>归入哪一天</span><input type="number" min={1} max={Math.max(maxDay, item.day)} value={day} onChange={(event) => setDay(Math.min(Math.max(1, Number(event.target.value)), Math.max(maxDay, item.day)))} /></label></div></div><div className="expense-modal-actions"><button className={`delete-expense ${confirmDelete ? "confirming" : ""}`} onClick={() => confirmDelete ? onDelete(item) : setConfirmDelete(true)}><Trash />{confirmDelete ? "确认删除" : "删除行程"}</button><button className="confirm-import" onClick={save}>保存修改<ArrowRight /></button></div>{confirmDelete && <small className="delete-warning">删除后无法恢复，再点一次确认删除。</small>}</section></div>;
 }
 
 function ExpenseEditModal({ expense, maxDay, onClose, onSave, onDelete }: { expense: Expense; maxDay: number; onClose: () => void; onSave: (expense: Expense) => void; onDelete: (expense: Expense) => void }) {
