@@ -1,78 +1,120 @@
 "use client";
 
-import { MapTrifold, Pause, Play } from "@phosphor-icons/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { MapPin, MapTrifold, Pause, Play, SpinnerGap } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type PlanLocation = { id: number; time: string; title: string; place: string };
-type RoutePoint = { x: number; y: number; item: PlanLocation };
+type Coordinate = [number, number];
+type RouteStop = PlanLocation & { address: string; location: Coordinate };
+type RouteData = { stops: RouteStop[]; path: Coordinate[]; unresolved: string[] };
+type MapInstance = { clearMap: () => void; destroy: () => void; setFitView: () => void };
+type MarkerInstance = { moveAlong?: (path: Coordinate[], options: { duration: number; autoRotation: boolean }) => void; pauseMove?: () => void; resumeMove?: () => void; stopMove?: () => void; setPosition: (position: Coordinate) => void };
+type AMapApi = {
+  Map: new (container: HTMLDivElement, options: Record<string, unknown>) => MapInstance;
+  Marker: new (options: Record<string, unknown>) => MarkerInstance;
+  Polyline: new (options: Record<string, unknown>) => unknown;
+  Pixel: new (x: number, y: number) => unknown;
+};
 
-function placeSeed(value: string) {
-  return [...value].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+declare global {
+  interface Window {
+    AMap?: AMapApi;
+    _AMapSecurityConfig?: { securityJsCode?: string };
+  }
 }
 
-function simulatedPoints(items: PlanLocation[]): RoutePoint[] {
-  return items.map((item, index) => {
-    if (items.length === 1) return { x: 50, y: 50, item };
-    const x = 10 + (index / (items.length - 1)) * 80;
-    const lane = index % 2 === 0 ? 32 : 68;
-    const jitter = (placeSeed(item.place) % 15) - 7;
-    return { x, y: Math.max(18, Math.min(82, lane + jitter)), item };
+let amapPromise: Promise<AMapApi> | null = null;
+const locationCache = new Map<string, RouteData>();
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] || character);
+}
+
+function loadAmap(key: string, securityCode: string) {
+  if (window.AMap) return Promise.resolve(window.AMap);
+  if (amapPromise) return amapPromise;
+  amapPromise = new Promise<AMapApi>((resolve, reject) => {
+    window._AMapSecurityConfig = { securityJsCode: securityCode };
+    const script = document.createElement("script");
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.MoveAnimation`;
+    script.async = true;
+    script.onload = () => window.AMap ? resolve(window.AMap) : reject(new Error("高德地图加载失败"));
+    script.onerror = () => reject(new Error("地图网络连接失败"));
+    document.head.appendChild(script);
   });
-}
-
-function pathFrom(points: RoutePoint[]) {
-  return points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
+  return amapPromise;
 }
 
 export default function RouteMap({ day, destination, plan }: { day: number; destination: string; plan: PlanLocation[] }) {
-  const svg = useRef<SVGSVGElement>(null);
-  const motion = useRef<SVGAnimateMotionElement>(null);
+  const mapElement = useRef<HTMLDivElement>(null);
+  const map = useRef<MapInstance | null>(null);
+  const movingMarker = useRef<MarkerInstance | null>(null);
+  const [route, setRoute] = useState<RouteData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
+  const jsKey = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
+  const securityCode = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE || "";
   const routeItems = useMemo(() => plan.filter((item) => item.place && item.place !== "待确认地点"), [plan]);
-  const points = useMemo(() => simulatedPoints(routeItems), [routeItems]);
-  const path = useMemo(() => pathFrom(points), [points]);
-  const routeKey = points.map((point) => `${point.item.id}-${point.x}-${point.y}`).join("|");
+  const routeKey = useMemo(() => `${destination}|${routeItems.map((item) => item.place).join("|")}`, [destination, routeItems]);
 
   useEffect(() => {
-    svg.current?.unpauseAnimations();
-    setPlaying(false);
-    setPaused(false);
-  }, [day, routeKey]);
+    const controller = new AbortController();
+    movingMarker.current?.stopMove?.();
+    Promise.resolve().then(() => {
+      if (controller.signal.aborted) return;
+      setPlaying(false); setPaused(false); setError("");
+      if (!routeItems.length || !jsKey || !securityCode) { setRoute(null); setLoading(false); return; }
+      const cached = locationCache.get(routeKey);
+      if (cached) { setRoute(cached); setLoading(false); return; }
+      setLoading(true);
+      fetch("/api/map/route", { method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal, body: JSON.stringify({ destination, items: routeItems }) })
+        .then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "地点定位失败");
+          return data as RouteData;
+        })
+        .then((data) => { locationCache.set(routeKey, data); setRoute(data); })
+        .catch((reason) => { if (reason?.name !== "AbortError") setError(reason instanceof Error ? reason.message : "地点定位失败"); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    });
+    return () => controller.abort();
+  }, [day, destination, jsKey, routeItems, routeKey, securityCode]);
 
-  function play() {
-    if (points.length < 2) return;
-    if (paused) {
-      svg.current?.unpauseAnimations();
-      setPaused(false);
-      setPlaying(true);
-      return;
-    }
-    motion.current?.beginElement();
-    setPlaying(true);
-  }
+  useEffect(() => {
+    if (!route || !route.stops.length || !mapElement.current || !jsKey || !securityCode) return;
+    let cancelled = false;
+    loadAmap(jsKey, securityCode).then((AMap) => {
+      if (cancelled || !mapElement.current) return;
+      if (!map.current) map.current = new AMap.Map(mapElement.current, { zoom: 12, mapStyle: "amap://styles/whitesmoke", viewMode: "2D" });
+      map.current.clearMap();
+      if (route.path.length > 1) new AMap.Polyline({ map: map.current, path: route.path, strokeColor: "#2f6b55", strokeWeight: 5, strokeOpacity: 0.82, strokeStyle: "dashed", lineJoin: "round", showDir: true });
+      route.stops.forEach((stop, index) => new AMap.Marker({ map: map.current, position: stop.location, title: stop.place, label: { direction: "top", content: `<span class="amap-stop-label">${index + 1}. ${escapeHtml(stop.place)}</span>`, offset: new AMap.Pixel(0, -7) }, content: `<span class="amap-stop-dot">${index + 1}</span>`, offset: new AMap.Pixel(-15, -15) }));
+      movingMarker.current = new AMap.Marker({ map: map.current, position: route.stops[0].location, zIndex: 120, content: '<span class="amap-traveler">➜</span>', offset: new AMap.Pixel(-17, -17) });
+      map.current.setFitView();
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : "地图加载失败"));
+    return () => { cancelled = true; movingMarker.current?.stopMove?.(); };
+  }, [jsKey, route, securityCode]);
 
-  function pause() {
-    svg.current?.pauseAnimations();
-    setPaused(true);
-    setPlaying(false);
-  }
+  useEffect(() => () => { map.current?.destroy(); map.current = null; }, []);
 
-  if (!routeItems.length) return <section className="route-map route-map-empty"><div><span><MapTrifold /></span><strong>导入地点后，路线会在这里展开</strong><p>无需等待智能规划，系统会按当天行程顺序立即生成一条旅行路线演示。</p></div></section>;
+  const play = useCallback(() => {
+    if (!route || route.path.length < 2 || !movingMarker.current) return;
+    if (paused) { movingMarker.current.resumeMove?.(); setPaused(false); setPlaying(true); return; }
+    movingMarker.current.stopMove?.(); movingMarker.current.setPosition(route.path[0]);
+    movingMarker.current.moveAlong?.(route.path, { duration: 900, autoRotation: true });
+    setPlaying(true); setPaused(false);
+  }, [paused, route]);
 
-  return <section className="route-map route-map-simulated" aria-label={`第 ${day} 天路线演示`}>
-    <header><div><span>DAY {String(day).padStart(2, "0")} · ROUTE STORY</span><h2>当天路线演示</h2><p>{routeItems.length} 个地点 · 按行程顺序模拟，不进行智能路线规划</p></div><div className="route-map-controls">{playing ? <button className="route-play" onClick={pause}><Pause weight="fill" />暂停</button> : <button className="route-play" disabled={points.length < 2} onClick={play}><Play weight="fill" />{paused ? "继续演示" : "播放演示"}</button>}</div></header>
-    <div className="route-map-canvas route-sim-canvas">
-      <div className="route-sim-destination"><span>TRAVEL SKETCH</span><strong>{destination && destination !== "待定目的地" ? destination : "这一天的沿途风景"}</strong></div>
-      <svg ref={svg} viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`依次经过 ${routeItems.map((item) => item.place).join("、")}`}>
-        <defs><pattern id="route-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(47,107,85,.08)" strokeWidth=".22" /></pattern><filter id="route-shadow"><feDropShadow dx="0" dy="1" stdDeviation="1.2" floodColor="#173f31" floodOpacity=".2" /></filter></defs>
-        <rect width="100" height="100" fill="url(#route-grid)" />
-        {path && <><path d={path} className="route-sim-path-shadow" /><path d={path} className="route-sim-path" /></>}
-        {points.map((point, index) => <g key={point.item.id} className="route-sim-stop" transform={`translate(${point.x} ${point.y})`}><circle r="3.7" /><text x="0" y="1.25" textAnchor="middle">{index + 1}</text></g>)}
-        {points.length > 1 && <g className="route-sim-traveler" filter="url(#route-shadow)"><circle r="3.3" /><path d="M-1.4 0 L1.4 0 M.2 -1.2 L1.6 0 .2 1.2" /><animateMotion ref={motion} key={routeKey} begin="indefinite" dur={`${Math.max(6, points.length * 1.4)}s`} repeatCount="indefinite" path={path} /></g>}
-      </svg>
-      <div className="route-sim-labels">{points.map((point, index) => <span key={point.item.id} style={{ left: `${point.x}%`, top: `${point.y}%` }} className={point.y > 50 ? "label-above" : "label-below"}><i>{index + 1}</i><b>{point.item.place}</b></span>)}</div>
-    </div>
-    <footer><div className="route-stops">{routeItems.map((item, index) => <span key={item.id}><i>{index + 1}</i><b>{item.time}</b>{item.place}</span>)}</div><small>这是一条视觉化演示路线，只表达游览顺序，不代表真实道路、里程或预计用时。</small></footer>
+  function pause() { movingMarker.current?.pauseMove?.(); setPaused(true); setPlaying(false); }
+
+  if (!routeItems.length) return <section className="route-map route-map-empty"><div><span><MapTrifold /></span><strong>导入地点后，地图会在这里展开</strong><p>地图会定位当天的真实地点，再按行程顺序直接连接，不进行道路规划。</p></div></section>;
+  if (!jsKey || !securityCode) return <section className="route-map route-map-setup"><div><span><MapPin /></span><strong>路线地图已经准备好</strong><p>还差高德地图 Key。配置后即可显示真实地图和地点。</p><small>NEXT_PUBLIC_AMAP_JS_KEY · NEXT_PUBLIC_AMAP_SECURITY_CODE · AMAP_WEB_SERVICE_KEY</small></div></section>;
+
+  return <section className="route-map" aria-label={`第 ${day} 天地点地图`}>
+    <header><div><span>DAY {String(day).padStart(2, "0")} · MAP</span><h2>当天地点地图</h2><p>{route?.stops.length || routeItems.length} 个地点 · 真实地图定位，按顺序直线连接</p></div><div className="route-map-controls">{playing ? <button className="route-play" onClick={pause}><Pause weight="fill" />暂停</button> : <button className="route-play" disabled={(route?.path.length || 0) < 2 || loading} onClick={play}><Play weight="fill" />{paused ? "继续" : "播放行程"}</button>}</div></header>
+    <div className="route-map-canvas" ref={mapElement}>{loading && <div className="route-map-loading"><SpinnerGap />正在定位当天地点</div>}{error && <div className="route-map-error"><MapTrifold /><strong>{error}</strong><span>可在行程编辑中把“地图地点”改得更具体。</span></div>}</div>
+    {route && <footer><div className="route-stops">{route.stops.map((stop, index) => <span key={stop.id}><i>{index + 1}</i><b>{stop.time}</b>{stop.place}</span>)}</div><small>虚线只表达游览顺序，不代表实际道路、距离或驾车时间。</small>{route.unresolved.length > 0 && <small>未定位：{route.unresolved.join("、")}，可补充城市或区县后重试。</small>}</footer>}
   </section>;
 }
