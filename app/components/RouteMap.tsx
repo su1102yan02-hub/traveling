@@ -58,7 +58,8 @@ export default function RouteMap({ day, destination, plan, revision = 0 }: { day
   const jsKey = process.env.NEXT_PUBLIC_AMAP_JS_KEY || "";
   const securityCode = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE || "";
   const routeItems = useMemo(() => plan.filter((item) => item.place && item.place !== "待确认地点"), [plan]);
-  const routeKey = useMemo(() => `${revision}|${destination}|${routeItems.map((item) => item.place).join("|")}`, [destination, revision, routeItems]);
+  const routePayload = useMemo(() => routeItems.length ? JSON.stringify({ destination, items: routeItems }) : "", [destination, routeItems]);
+  const routeKey = `${revision}|${routePayload}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -67,11 +68,11 @@ export default function RouteMap({ day, destination, plan, revision = 0 }: { day
       if (controller.signal.aborted) return;
       setPlaying(false); setPaused(false); setError("");
       setRoute(null); map.current?.clearMap();
-      if (!routeItems.length || !jsKey || !securityCode) { setRoute(null); setLoading(false); return; }
+      if (!routePayload || !jsKey || !securityCode) { setRoute(null); setLoading(false); return; }
       const cached = locationCache.get(routeKey);
       if (cached) { setRoute(cached); setLoading(false); return; }
       setLoading(true);
-      fetch("/api/map/route", { method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal, body: JSON.stringify({ destination, items: routeItems }) })
+      fetch("/api/map/route", { method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal, body: routePayload })
         .then(async (response) => {
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "地点定位失败");
@@ -82,7 +83,7 @@ export default function RouteMap({ day, destination, plan, revision = 0 }: { day
         .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     });
     return () => controller.abort();
-  }, [day, destination, jsKey, retryCount, routeItems, routeKey, securityCode]);
+  }, [jsKey, retryCount, routeKey, routePayload, securityCode]);
 
   useEffect(() => {
     if (!route || !route.stops.length || !mapElement.current || !jsKey || !securityCode) return;
